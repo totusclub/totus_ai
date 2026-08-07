@@ -37,7 +37,7 @@ function appendAflt(url: string) {
   }
 }
 
-export const BUILD_TAG = 'v35-light-redesign · 2026-08-04'
+export const BUILD_TAG = 'v36-brand-totus · 2026-08-07'
 
 export function isLevelTravelEnabled() {
   const key = process.env.LEVEL_TRAVEL_API_KEY?.trim()

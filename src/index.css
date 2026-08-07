@@ -6,33 +6,35 @@
  * коралловый акцент действий. Все цвета — только отсюда.
  */
 @theme {
-  --font-sans: "Onest", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Unbounded", "Onest", ui-sans-serif, sans-serif;
+  /* Шрифт основного сайта totus.club — Golos Text (кириллица, Paratype) */
+  --font-sans: "Golos Text", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Golos Text", ui-sans-serif, system-ui, sans-serif;
 
-  /* Основа */
-  --color-paper: #ffffff;        /* фон карточек и виджета */
-  --color-page: #f8f6f2;         /* фон страницы, тёплый */
-  --color-sand: #f4f0e9;         /* поверхности: пузыри Милы, подложки */
-  --color-ink: #17293f;          /* основной текст, пузыри клиента */
-  --color-subtle: #637182;       /* вторичный текст */
-  --color-faint: #93a0b0;        /* подписи, плейсхолдеры */
-  --color-line: #e8e2d7;         /* границы, песочные */
+  /* Основа — снято с totus.club */
+  --color-paper: #ffffff;        /* карточки, виджет */
+  --color-page: #f5f6f8;         /* фон страницы */
+  --color-sand: #f3f5f7;         /* поверхности: пузыри Милы, подложки */
+  --color-ink: #1f1f1f;          /* основной текст сайта */
+  --color-subtle: #6b7280;       /* вторичный текст */
+  --color-faint: #9ca3af;        /* подписи, плейсхолдеры */
+  --color-line: #e6e8eb;         /* границы */
 
-  /* Акценты */
-  --color-coral: #ff5a3c;        /* действия, цены — закат */
-  --color-coral-deep: #e8492d;   /* hover */
-  --color-sea: #0e7c86;          /* ссылки, иконки-метки — море */
-  --color-sea-soft: #e3f1f2;     /* подложка морского */
-  --color-gold: #e8a020;         /* рейтинг */
-  --color-ok: #0e9f6e;           /* успех */
-  --color-danger: #d43d2a;       /* ошибки */
+  /* Фирменные акценты: оранжевый кнопки «Найти», синий логотипа */
+  --color-coral: #fe732e;        /* действия, цены */
+  --color-coral-deep: #ea5f1a;   /* hover */
+  --color-sea: #35a8e0;          /* ссылки, метки */
+  --color-sea-soft: #e8f4fc;     /* подложка синего */
+  --color-gold: #f0a92c;         /* рейтинг */
+  --color-ok: #16a34a;           /* успех */
+  --color-danger: #dc2626;       /* ошибки */
 
-  --radius-card: 14px;
-  --radius-btn: 12px;
+  /* Геометрия сайта: кнопки 16px, карточки 18px */
+  --radius-card: 18px;
+  --radius-btn: 16px;
   --radius-chat: 18px;
 
-  --shadow-card: 0 10px 30px rgb(23 41 63 / 0.08);
-  --shadow-pop: 0 18px 50px rgb(23 41 63 / 0.16);
+  --shadow-card: 0 8px 32px rgb(0 0 0 / 0.12);
+  --shadow-pop: 0 16px 48px rgb(0 0 0 / 0.18);
 }
 
 * { box-sizing: border-box; }

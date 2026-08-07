@@ -1,0 +1,28 @@
+# Секреты — НИКОГДА не коммитить
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Зависимости и сборка
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Логи
+logs/
+*.log
+npm-debug.log*
+.totus-chat-logs/
+
+# Редакторы и ОС
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.swp
+
+# TypeScript
+*.tsbuildinfo

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
   return (
     <label
-      className={cn('mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400', className)}
+      className={cn('mb-1.5 block text-xs font-medium uppercase tracking-wide text-subtle', className)}
       {...props}
     />
   )

@@ -37,7 +37,7 @@ function appendAflt(url: string) {
   }
 }
 
-export const BUILD_TAG = 'v34-destinations · 2026-07-28'
+export const BUILD_TAG = 'v35-light-redesign · 2026-08-04'
 
 export function isLevelTravelEnabled() {
   const key = process.env.LEVEL_TRAVEL_API_KEY?.trim()

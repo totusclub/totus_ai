@@ -3,17 +3,17 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[16px] text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/60 disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-btn)] text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral/50 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
         default:
-          'bg-cyan-500 text-slate-950 hover:bg-cyan-400 shadow-[0_0_20px_rgb(6_182_212_/_0.25)] hover:shadow-[0_0_28px_rgb(6_182_212_/_0.4)]',
-        secondary: 'bg-blue-500 text-white hover:bg-blue-400',
+          'bg-coral text-white hover:bg-coral-deep shadow-[0_8px_20px_rgb(255_90_60_/_0.28)] hover:shadow-[0_10px_26px_rgb(255_90_60_/_0.36)]',
+        secondary: 'bg-sea text-white hover:bg-[#0a6a73]',
         outline:
-          'border border-slate-700 bg-slate-800/40 text-white hover:border-cyan-500/50 hover:bg-slate-800',
-        ghost: 'text-slate-300 hover:bg-slate-800 hover:text-white',
-        danger: 'bg-red-500/90 text-white hover:bg-red-500',
+          'border border-line bg-paper text-ink hover:border-coral/60 hover:text-coral',
+        ghost: 'text-subtle hover:bg-sand hover:text-ink',
+        danger: 'bg-danger text-white hover:bg-[#c13424]',
       },
       size: {
         default: 'h-11 px-5',

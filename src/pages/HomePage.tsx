@@ -29,13 +29,13 @@ export function HomePage() {
     <div className="mx-auto max-w-7xl px-4 py-6 lg:px-6">
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-2 text-sm font-medium uppercase tracking-[0.2em] text-cyan-400/80">
+          <p className="mb-2 text-sm font-medium uppercase tracking-[0.2em] text-sea/80">
             Тотус клуб
           </p>
-          <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
             Подбор туров с Милой
           </h1>
-          <p className="mt-2 max-w-xl text-slate-400">
+          <p className="mt-2 max-w-xl text-subtle">
             Опишите отдых в чате — Мила подберёт туры и покажет их здесь со ссылками.
           </p>
         </div>
@@ -53,7 +53,7 @@ export function HomePage() {
 
       <section>
         <div className="mb-4 flex items-center justify-between gap-3">
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-subtle">
             {isTyping
               ? 'Мила подбирает туры…'
               : hasTours
@@ -84,14 +84,14 @@ function plural(n: number) {
 
 function EmptyState({ onOpen }: { onOpen: () => void }) {
   return (
-    <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[12px] border border-dashed border-slate-700 bg-slate-800/30 px-6 text-center">
-      <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-slate-900 text-cyan-400">
+    <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[12px] border border-dashed border-line bg-sand/30 px-6 text-center">
+      <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-page text-sea">
         <MessageCircle className="h-10 w-10" />
       </div>
-      <h3 className="font-[family-name:var(--font-display)] text-xl font-semibold text-white">
+      <h3 className="font-[family-name:var(--font-display)] text-xl font-semibold text-ink">
         Спросите Милу
       </h3>
-      <p className="mt-2 max-w-md text-sm text-slate-400">
+      <p className="mt-2 max-w-md text-sm text-subtle">
         Например: «Турция в конце августа, двое взрослых и ребёнок 5 лет, всё включено, песчаный
         пляж». Мила найдёт туры и покажет их здесь.
       </p>

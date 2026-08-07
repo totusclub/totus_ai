@@ -35,15 +35,15 @@ export function SchemaVisualizer({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/60 backdrop-blur-sm">
-      <div className="flex h-full w-full max-w-xl flex-col border-l border-slate-700 bg-slate-900 shadow-2xl animate-fade-in-up">
-        <header className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
+    <div className="fixed inset-0 z-40 flex justify-end bg-page/60 backdrop-blur-sm">
+      <div className="flex h-full w-full max-w-xl flex-col border-l border-line bg-page shadow-2xl animate-fade-in-up">
+        <header className="flex items-center justify-between border-b border-line px-4 py-3">
           <div>
-            <p className="flex items-center gap-2 font-[family-name:var(--font-display)] font-semibold text-white">
-              <Database className="h-4 w-4 text-cyan-400" />
+            <p className="flex items-center gap-2 font-[family-name:var(--font-display)] font-semibold text-ink">
+              <Database className="h-4 w-4 text-sea" />
               Schema Visualizer
             </p>
-            <p className="text-xs text-slate-400">Admin / debug · таблицы и связи</p>
+            <p className="text-xs text-subtle">Admin / debug · таблицы и связи</p>
           </div>
           <Button type="button" variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
@@ -63,8 +63,8 @@ export function SchemaVisualizer({
                 onClick={() => setSelected(t.name)}
                 className={`rounded-xl border px-3 py-2 text-sm transition ${
                   table?.name === t.name
-                    ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-200'
-                    : 'border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-500'
+                    ? 'border-sea/50 bg-sea-soft text-sea'
+                    : 'border-line bg-sand/80 text-ink/80 hover:border-faint'
                 }`}
               >
                 {t.name}
@@ -72,26 +72,26 @@ export function SchemaVisualizer({
             ))}
           </div>
 
-          <div className="overflow-y-auto rounded-[12px] border border-slate-700 bg-slate-800/40 p-4">
+          <div className="overflow-y-auto rounded-[12px] border border-line bg-sand/60 p-4">
             {table ? (
               <>
-                <h3 className="mb-3 font-semibold text-white">{table.name}</h3>
+                <h3 className="mb-3 font-semibold text-ink">{table.name}</h3>
                 <ul className="space-y-2">
                   {table.columns.map((col) => (
                     <li
                       key={col.name}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-700/70 bg-slate-900/50 px-3 py-2 text-sm"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-line bg-page/50 px-3 py-2 text-sm"
                     >
                       <div className="flex items-center gap-2">
-                        {col.pk && <KeyRound className="h-3.5 w-3.5 text-amber-400" />}
-                        {col.fk && <Link2 className="h-3.5 w-3.5 text-blue-400" />}
-                        <span className="font-medium text-white">{col.name}</span>
+                        {col.pk && <KeyRound className="h-3.5 w-3.5 text-gold" />}
+                        {col.fk && <Link2 className="h-3.5 w-3.5 text-sea" />}
+                        <span className="font-medium text-ink">{col.name}</span>
                       </div>
-                      <div className="text-right text-xs text-slate-400">
+                      <div className="text-right text-xs text-subtle">
                         <span>{col.type}</span>
-                        {col.pk && <span className="ml-2 text-amber-400">PK</span>}
-                        {col.fk && <span className="ml-2 text-blue-400">FK → {col.fk}</span>}
-                        {col.nullable && <span className="ml-2 text-slate-500">null</span>}
+                        {col.pk && <span className="ml-2 text-gold">PK</span>}
+                        {col.fk && <span className="ml-2 text-sea">FK → {col.fk}</span>}
+                        {col.nullable && <span className="ml-2 text-faint">null</span>}
                       </div>
                     </li>
                   ))}
@@ -99,17 +99,17 @@ export function SchemaVisualizer({
 
                 {relations.length > 0 && (
                   <div className="mt-5">
-                    <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">
+                    <p className="mb-2 text-xs uppercase tracking-wide text-faint">
                       Связи
                     </p>
                     <div className="space-y-2">
                       {relations.map((r) => (
                         <div
                           key={r.from}
-                          className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-200"
+                          className="flex items-center gap-2 rounded-lg border border-sea/20 bg-sea-soft px-3 py-2 text-xs text-sea"
                         >
                           <span>{r.from}</span>
-                          <span className="text-slate-500">───</span>
+                          <span className="text-faint">───</span>
                           <span>{r.to}</span>
                         </div>
                       ))}

@@ -10,7 +10,7 @@ export function QuickActions({ onSelect }: { onSelect: (prompt: string) => void 
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 border-slate-700/80 bg-slate-900/40 text-[11px] text-slate-300 hover:border-cyan-500/40 hover:text-cyan-200"
+          className="h-8 border-line bg-sand/70 text-[11px] text-ink/80 hover:border-coral/50 hover:text-sea"
           onClick={() => onSelect(action.prompt)}
         >
           {action.labelRu}

@@ -55,24 +55,32 @@ export function ChatWidget() {
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
       {isOpen && (
-        <div className="flex h-[min(640px,calc(100vh-7rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[20px] border border-slate-700/80 bg-slate-900/95 shadow-[0_20px_60px_rgb(0_0_0_/_0.45),0_0_40px_rgb(6_182_212_/_0.12)] backdrop-blur-xl animate-fade-in-up">
-          <header className="flex items-center justify-between border-b border-slate-700/80 bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/40 px-4 py-3">
-            <div>
-              <p className="font-[family-name:var(--font-display)] text-sm font-semibold text-white">
+        <div className="flex h-[min(640px,calc(100vh-7rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[20px] border border-line bg-paper shadow-pop animate-fade-in-up">
+          <header className="flex items-center justify-between border-b border-line bg-paper px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <span
+                aria-hidden
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-coral to-[#ffb35c] text-base shadow-[0_4px_12px_rgb(255_90_60_/_0.35)]"
+              >
+                ☀️
+              </span>
+              <div>
+              <p className="font-[family-name:var(--font-display)] text-[13px] font-semibold tracking-tight text-ink">
                 Мила · Тотус клуб
               </p>
-              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-subtle">
                 {isConnected ? (
                   <>
-                    <Wifi className="h-3 w-3 text-green-400" />
+                    <Wifi className="h-3 w-3 text-ok" />
                     {kimiOn ? 'Онлайн · подбор туров' : 'Локальный режим'}
                   </>
                 ) : (
                   <>
-                    <WifiOff className="h-3 w-3 text-amber-400" /> Переподключение…
+                    <WifiOff className="h-3 w-3 text-gold" /> Переподключение…
                   </>
                 )}
               </p>
+              </div>
             </div>
             <div className="flex items-center gap-1">
               <Button
@@ -108,15 +116,15 @@ export function ChatWidget() {
           </header>
 
           {showChatList && (
-            <div className="max-h-64 overflow-y-auto border-b border-slate-700/80 bg-slate-900/60">
-              <p className="px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+            <div className="max-h-64 overflow-y-auto border-b border-line bg-paper">
+              <p className="px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-faint">
                 Мои чаты
               </p>
               {[...chats].reverse().map((chat) => (
                 <div
                   key={chat.id}
-                  className={`group flex items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-slate-800/70 ${
-                    chat.id === activeChatId ? 'bg-slate-800/50 text-cyan-300' : 'text-slate-300'
+                  className={`group flex items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-sand ${
+                    chat.id === activeChatId ? 'bg-sand/80 text-coral' : 'text-ink/80'
                   }`}
                 >
                   <button
@@ -125,7 +133,7 @@ export function ChatWidget() {
                     className="min-w-0 flex-1 truncate text-left"
                   >
                     {chat.title}
-                    <span className="ml-2 text-[10px] text-slate-500">
+                    <span className="ml-2 text-[10px] text-faint">
                       {new Date(chat.updatedAt).toLocaleDateString('ru-RU', {
                         day: '2-digit',
                         month: '2-digit',
@@ -136,7 +144,7 @@ export function ChatWidget() {
                     type="button"
                     onClick={() => deleteChat(chat.id)}
                     title="Удалить чат"
-                    className="shrink-0 text-slate-600 opacity-0 transition-opacity hover:text-amber-400 group-hover:opacity-100"
+                    className="shrink-0 text-faint opacity-0 transition-opacity hover:text-gold group-hover:opacity-100"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -151,20 +159,20 @@ export function ChatWidget() {
             ))}
             {isTyping && (
               <div className="flex justify-start">
-                <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-700/80 bg-slate-800/80 px-3 py-2.5">
+                <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-line bg-sand px-3 py-2.5">
                   <span className="flex items-center gap-1">
-                    <span className="typing-dot h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                    <span className="typing-dot h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                    <span className="typing-dot h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                    <span className="typing-dot h-1.5 w-1.5 rounded-full bg-coral" />
+                    <span className="typing-dot h-1.5 w-1.5 rounded-full bg-coral" />
+                    <span className="typing-dot h-1.5 w-1.5 rounded-full bg-coral" />
                   </span>
-                  <span className="text-xs text-slate-400">{typingStatus ?? 'Думаю'}…</span>
+                  <span className="text-xs text-subtle">{typingStatus ?? 'Думаю'}…</span>
                 </div>
               </div>
             )}
             <div ref={bottomRef} />
           </div>
 
-          <div className="space-y-2 border-t border-slate-700/80 p-3">
+          <div className="space-y-2 border-t border-line p-3">
             <QuickActions
               onSelect={(prompt) => {
                 send(prompt)
@@ -194,7 +202,7 @@ export function ChatWidget() {
                 <Send className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-center text-[10px] leading-snug text-slate-500">
+            <p className="text-center text-[10px] leading-snug text-faint">
               Агент может ошибаться — пожалуйста, перепроверяйте результат вручную.
             </p>
           </div>
@@ -204,7 +212,7 @@ export function ChatWidget() {
       <button
         type="button"
         onClick={toggleOpen}
-        className="group flex h-14 w-14 items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-[0_0_30px_rgb(6_182_212_/_0.45)] transition hover:scale-105 hover:bg-cyan-400"
+        className="group flex h-14 w-14 items-center justify-center rounded-full bg-coral text-white shadow-[0_10px_28px_rgb(255_90_60_/_0.4)] transition hover:scale-105 hover:bg-coral-deep"
         aria-label={isOpen ? 'Закрыть чат' : 'Открыть чат'}
       >
         {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}

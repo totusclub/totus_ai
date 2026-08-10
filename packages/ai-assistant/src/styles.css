@@ -1,9 +1,14 @@
-@import "tailwindcss";
+/*
+ * Embeddable styles for kedam-WEB / any host app.
+ * - No Tailwind preflight (avoids breaking host site buttons/inputs)
+ * - Utilities nested under .totus-ai-root + !important so they win over host CSS
+ */
+@layer theme, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+
 @source "./**/*.{ts,tsx}";
 
-/**
- * Тема «Тотус клуб» — scoped under .totus-ai-root so kedam-WEB is not affected.
- */
 @theme {
   --font-sans: "Golos Text", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Golos Text", ui-sans-serif, system-ui, sans-serif;
@@ -30,10 +35,30 @@
 
   --shadow-card: 0 8px 32px rgb(0 0 0 / 0.12);
   --shadow-pop: 0 16px 48px rgb(0 0 0 / 0.18);
+
+  --animate-fade-in-up: totus-fade-in-up 0.35s ease-out both;
+}
+
+@keyframes totus-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer utilities {
+  .totus-ai-root {
+    @tailwind utilities important;
+  }
 }
 
 .totus-ai-root {
   box-sizing: border-box;
+  min-height: 100vh;
   font-family: var(--font-sans);
   background: var(--color-page);
   color: var(--color-ink);
@@ -50,29 +75,79 @@
   scrollbar-width: thin;
   scrollbar-color: var(--color-line) transparent;
 }
-.totus-ai-root::-webkit-scrollbar { width: 8px; height: 8px; }
-.totus-ai-root::-webkit-scrollbar-thumb { background: var(--color-line); border-radius: 8px; }
+.totus-ai-root::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.totus-ai-root::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 8px;
+}
 
-.typing-dot { animation: totus-typing-bounce 1.2s ease-in-out infinite; }
-.typing-dot:nth-child(2) { animation-delay: 0.15s; }
-.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+.totus-ai-root button,
+.totus-ai-root input,
+.totus-ai-root textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.totus-ai-root button {
+  cursor: pointer;
+  appearance: none;
+  background: none;
+  border: none;
+}
+
+.totus-ai-root textarea {
+  appearance: none;
+}
+
+.typing-dot {
+  animation: 1.2s ease-in-out infinite totus-typing-bounce;
+}
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
 @keyframes totus-typing-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
-  30% { transform: translateY(-4px); opacity: 1; }
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
 }
 
 .ticket-stub::before {
   content: "";
-  position: absolute; left: 10px; right: 10px; top: 0;
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 0;
   border-top: 2px dashed var(--color-line);
 }
-.ticket-notch-top, .ticket-notch-bottom {
-  position: absolute; top: -8px; width: 16px; height: 16px;
-  background: var(--color-page); border-radius: 50%;
+.ticket-notch-top,
+.ticket-notch-bottom {
+  position: absolute;
+  top: -8px;
+  width: 16px;
+  height: 16px;
+  background: var(--color-page);
+  border-radius: 50%;
   border: 1px solid var(--color-line);
 }
-.ticket-notch-top { left: -9px; }
-.ticket-notch-bottom { right: -9px; }
+.ticket-notch-top {
+  left: -9px;
+}
+.ticket-notch-bottom {
+  right: -9px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .totus-ai-root *,

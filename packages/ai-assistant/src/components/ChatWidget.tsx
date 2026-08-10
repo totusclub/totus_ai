@@ -197,6 +197,7 @@ export function ChatWidget() {
               <Button
                 type="button"
                 size="icon"
+                className="shrink-0 rounded-full"
                 onClick={submit}
                 disabled={!draft.trim() || isTyping}
                 aria-label="Отправить"

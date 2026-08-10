@@ -497,8 +497,8 @@ function AiHomePage() {
   return /* @__PURE__ */ jsxs("div", { className: "mx-auto max-w-7xl px-4 py-6 lg:px-6", children: [
     /* @__PURE__ */ jsxs("header", { className: "mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", children: [
       /* @__PURE__ */ jsxs("div", { children: [
-        /* @__PURE__ */ jsx("p", { className: "mb-2 text-sm font-medium uppercase tracking-[0.2em] text-sea/80", children: "\u0422\u043E\u0442\u0443\u0441 \u043A\u043B\u0443\u04311" }),
-        /* @__PURE__ */ jsx("h1", { className: "font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-ink sm:text-3xl", children: "\u041F\u043E\u0434\u0431\u043E\u0440 \u0442\u0443\u0440\u043E\u0432 \u0441 \u041C\u0438\u043B\u043E\u04391" }),
+        /* @__PURE__ */ jsx("p", { className: "mb-2 text-sm font-medium uppercase tracking-[0.2em] text-sea/80", children: "\u0422\u043E\u0442\u0443\u0441 \u043A\u043B\u0443\u0431" }),
+        /* @__PURE__ */ jsx("h1", { className: "font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-ink sm:text-3xl", children: "\u041F\u043E\u0434\u0431\u043E\u0440 \u0442\u0443\u0440\u043E\u0432 \u0441 \u041C\u0438\u043B\u043E\u0439" }),
         /* @__PURE__ */ jsx("p", { className: "mt-2 max-w-xl text-subtle", children: "\u041E\u043F\u0438\u0448\u0438\u0442\u0435 \u043E\u0442\u0434\u044B\u0445 \u0432 \u0447\u0430\u0442\u0435 \u2014 \u041C\u0438\u043B\u0430 \u043F\u043E\u0434\u0431\u0435\u0440\u0451\u0442 \u0442\u0443\u0440\u044B \u0438 \u043F\u043E\u043A\u0430\u0436\u0435\u0442 \u0438\u0445 \u0437\u0434\u0435\u0441\u044C \u0441\u043E \u0441\u0441\u044B\u043B\u043A\u0430\u043C\u0438." })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex flex-wrap gap-2", children: [

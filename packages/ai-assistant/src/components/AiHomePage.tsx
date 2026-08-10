@@ -1,12 +1,13 @@
 'use client'
 
+import { useEffect } from 'react'
 import { Database, Sparkles, MessageCircle } from 'lucide-react'
 import { TourGrid } from '@/components/TourGrid'
 import { SchemaVisualizer } from '@/components/SchemaVisualizer'
 import { Button } from '@/components/ui/button'
 import { useAssistantStore } from '@/stores/assistantStore'
 
-export function AiHomePage() {
+export function AiHomePage({ autoOpenChat = true }: { autoOpenChat?: boolean }) {
   const highlightedTours = useAssistantStore((s) => s.highlightedTours)
   const isTyping = useAssistantStore((s) => s.isTyping)
   const showSchema = useAssistantStore((s) => s.showSchema)
@@ -14,6 +15,10 @@ export function AiHomePage() {
   const setOpen = useAssistantStore((s) => s.setOpen)
 
   const hasTours = highlightedTours.length > 0
+
+  useEffect(() => {
+    if (autoOpenChat) setOpen(true)
+  }, [autoOpenChat, setOpen])
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 lg:px-6">

@@ -31,14 +31,23 @@ declare function getApiBase(): string;
 declare function getTourHref(tourId: string, room?: string): string;
 declare function getWsUrl(): string;
 
-declare function AiHomePage(): react.JSX.Element;
+declare function AiHomePage({ autoOpenChat }: {
+    autoOpenChat?: boolean;
+}): react.JSX.Element;
 
 declare function AiTourDetailPage({ tourId, selectedRoom, }: {
     tourId: string;
     selectedRoom?: string | null;
 }): react.JSX.Element;
 
-declare function ChatWidget(): react.JSX.Element;
+type ChatWidgetProps = {
+    /**
+     * Если true — кнопка справа внизу открывает чат на весь экран (модалка).
+     * По умолчанию false — маленький виджет (как на ai.totus.club).
+     */
+    fullscreenOnOpen?: boolean;
+};
+declare function ChatWidget({ fullscreenOnOpen }: ChatWidgetProps): react.JSX.Element;
 
 type TourCategory = 'adventure' | 'cultural' | 'food' | 'relaxation' | 'nightlife' | 'family';
 type DurationFilter = 'half-day' | 'full-day' | 'multi-day';
@@ -292,4 +301,4 @@ interface ChatSession {
 }
 declare const useAssistantStore: zustand.UseBoundStore<zustand.StoreApi<AssistantState>>;
 
-export { type AiAssistantConfig, AiAssistantProvider, type AiAssistantProviderProps, AiHomePage, AiTourDetailPage, type AvailabilityResponse, type BookingRequest, type BookingResponse, ChatMessage, ChatWidget, type DestinationCard, type DurationFilter, type ItineraryItem, type Location, QuickActions, type Review, type RoomCard, type RoomCardsPayload, type SchemaColumn, type SchemaTable, SchemaVisualizer, type SearchFilters, type ToolCall, type Tour, TourCard, type TourCategory, TourGrid, type WsClientMessage, type WsServerMessage, configureAiAssistant, getAiConfig, getApiBase, getTourHref, getWsUrl, useAssistant, useAssistantStore, useWebSocket };
+export { type AiAssistantConfig, AiAssistantProvider, type AiAssistantProviderProps, AiHomePage, AiTourDetailPage, type AvailabilityResponse, type BookingRequest, type BookingResponse, ChatMessage, ChatWidget, type ChatWidgetProps, type DestinationCard, type DurationFilter, type ItineraryItem, type Location, QuickActions, type Review, type RoomCard, type RoomCardsPayload, type SchemaColumn, type SchemaTable, SchemaVisualizer, type SearchFilters, type ToolCall, type Tour, TourCard, type TourCategory, TourGrid, type WsClientMessage, type WsServerMessage, configureAiAssistant, getAiConfig, getApiBase, getTourHref, getWsUrl, useAssistant, useAssistantStore, useWebSocket };

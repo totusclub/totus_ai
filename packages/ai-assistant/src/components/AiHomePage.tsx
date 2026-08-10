@@ -25,10 +25,10 @@ export function AiHomePage() {
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-2 text-sm font-medium uppercase tracking-[0.2em] text-sea/80">
-            Тотус клуб
+            Тотус клуб1
           </p>
           <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-            Подбор туров с Милой
+            Подбор туров с Милой1
           </h1>
           <p className="mt-2 max-w-xl text-subtle">
             Опишите отдых в чате — Мила подберёт туры и покажет их здесь со ссылками.

@@ -2,33 +2,35 @@
 
 Embeddable Totus AI (Мила) React UI.
 
-## Install into kedam-WEB (from this GitHub repo)
+## Install from GitHub (recommended)
 
-npm cannot install a monorepo *subdirectory* from git directly, so we publish a packed tarball in the same repo:
+Package is published to branch `pkg/ai-assistant` of this same repo.
 
 ```bash
-npm install https://github.com/tosmedia/totus_ai_v2/raw/main/packages/ai-assistant/release/tosmedia-ai-assistant-1.0.0.tgz
+npm install git+https://github.com/tosmedia/totus_ai_v2.git#pkg/ai-assistant
 ```
 
-Or in `package.json`:
+`package.json`:
 
 ```json
-"@tosmedia/ai-assistant": "https://github.com/tosmedia/totus_ai_v2/raw/main/packages/ai-assistant/release/tosmedia-ai-assistant-1.0.0.tgz"
+"@tosmedia/ai-assistant": "git+https://github.com/tosmedia/totus_ai_v2.git#pkg/ai-assistant"
 ```
 
-After UI changes in this package:
+Private repo: your machine/CI must have GitHub access (same as `git clone`).
+
+### Publish a new UI version
 
 ```bash
-# bump "version" in package.json first
-npm run pack:release
-git add release && git commit -m "release ai-assistant x.y.z" && git push
-# then in kedam-WEB bump the tarball URL / version and npm install
+# in totus_ai_v2 — bump version in packages/ai-assistant/package.json first
+npm run publish:assistant:git
 ```
 
-Local development (optional):
+Then in kedam-WEB:
 
 ```bash
-npm install file:../totus_ai_v2/packages/ai-assistant
+npm update @tosmedia/ai-assistant
+# or reinstall:
+npm install git+https://github.com/tosmedia/totus_ai_v2.git#pkg/ai-assistant
 ```
 
 ## Usage

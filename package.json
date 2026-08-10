@@ -18,6 +18,7 @@
     "start:web": "next start -p 3012",
     "start:api": "npm run server",
     "publish:assistant": "npm publish -w @tosmedia/ai-assistant",
+    "publish:assistant:git": "bash scripts/publish-ai-assistant-git.sh",
     "lint": "oxlint",
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json"
   },

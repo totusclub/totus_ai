@@ -76,11 +76,20 @@
 
 .totus-ai-root {
   box-sizing: border-box;
-  min-height: 100vh;
   font-family: var(--font-sans);
-  background: var(--color-page);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Full AI page shell (ai.totus.club / /ai) */
+.totus-ai-root--app {
+  min-height: 100vh;
+  background: var(--color-page);
+}
+
+/* Floating chat on host site — no layout box, only CSS scoping */
+.totus-ai-root--widget {
+  display: contents;
 }
 
 .totus-ai-root *,

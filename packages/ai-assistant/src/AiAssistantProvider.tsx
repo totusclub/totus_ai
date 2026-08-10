@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
 import { configureAiAssistant, type AiAssistantConfig } from '@/config'
+import { cn } from '@/lib/utils'
 
 export type AiAssistantProviderProps = {
   children: ReactNode
@@ -14,6 +15,11 @@ export type AiAssistantProviderProps = {
   tourBasePath?: string
   /** e.g. / or /ai */
   homePath?: string
+  /**
+   * `page` — полноценная AI-страница (фон + min-height).
+   * `widget` — только плавающий чат на сайте-хосте (без влияния на layout).
+   */
+  shell?: 'page' | 'widget'
 }
 
 function applyConfig(props: Omit<AiAssistantProviderProps, 'children'>) {
@@ -31,6 +37,7 @@ export function AiAssistantProvider({
   wsUrl,
   tourBasePath,
   homePath,
+  shell = 'page',
 }: AiAssistantProviderProps) {
   applyConfig({ apiBase, wsUrl, tourBasePath, homePath })
 
@@ -52,7 +59,15 @@ export function AiAssistantProvider({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="totus-ai-root min-h-screen">{children}</div>
+      <div
+        className={cn(
+          'totus-ai-root',
+          shell === 'page' && 'totus-ai-root--app',
+          shell === 'widget' && 'totus-ai-root--widget',
+        )}
+      >
+        {children}
+      </div>
     </QueryClientProvider>
   )
 }

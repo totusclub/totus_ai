@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import * as React from 'react';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
-import { MapPin, Clock, Map, Database, X, KeyRound, Link2, Sparkles, MessageCircle, ArrowLeft, Check, Calendar, Users, Wifi, WifiOff, MessagesSquare, Plus, Trash2, Send } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
+import { MapPin, Clock, Map, Database, X, KeyRound, Link2, Sparkles, MessageCircle, ArrowLeft, Check, Calendar, Users, Wifi, WifiOff, MessagesSquare, Plus, Trash2, Send } from 'lucide-react';
 import { cva } from 'class-variance-authority';
 import { create } from 'zustand';
 
@@ -48,6 +48,19 @@ function getWsUrl() {
   }
   return `${wsProto}://${host}/ws/assistant`;
 }
+function cn(...inputs) {
+  return twMerge(clsx(inputs));
+}
+function formatPrice(price, currency = "USD") {
+  return new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0
+  }).format(price);
+}
+function uid(prefix = "id") {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+}
 function applyConfig(props) {
   const next = {};
   if (props.apiBase !== void 0) next.apiBase = props.apiBase;
@@ -61,7 +74,8 @@ function AiAssistantProvider({
   apiBase,
   wsUrl,
   tourBasePath,
-  homePath
+  homePath,
+  shell = "page"
 }) {
   applyConfig({ apiBase, wsUrl, tourBasePath, homePath });
   const [queryClient] = useState(
@@ -77,20 +91,17 @@ function AiAssistantProvider({
   useEffect(() => {
     applyConfig({ apiBase, wsUrl, tourBasePath, homePath });
   }, [apiBase, wsUrl, tourBasePath, homePath]);
-  return /* @__PURE__ */ jsx(QueryClientProvider, { client: queryClient, children: /* @__PURE__ */ jsx("div", { className: "totus-ai-root min-h-screen", children }) });
-}
-function cn(...inputs) {
-  return twMerge(clsx(inputs));
-}
-function formatPrice(price, currency = "USD") {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0
-  }).format(price);
-}
-function uid(prefix = "id") {
-  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+  return /* @__PURE__ */ jsx(QueryClientProvider, { client: queryClient, children: /* @__PURE__ */ jsx(
+    "div",
+    {
+      className: cn(
+        "totus-ai-root",
+        shell === "page" && "totus-ai-root--app",
+        shell === "widget" && "totus-ai-root--widget"
+      ),
+      children
+    }
+  ) });
 }
 function Badge({
   className,

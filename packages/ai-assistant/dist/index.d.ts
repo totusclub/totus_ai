@@ -12,8 +12,13 @@ type AiAssistantProviderProps = {
     tourBasePath?: string;
     /** e.g. / or /ai */
     homePath?: string;
+    /**
+     * `page` — полноценная AI-страница (фон + min-height).
+     * `widget` — только плавающий чат на сайте-хосте (без влияния на layout).
+     */
+    shell?: 'page' | 'widget';
 };
-declare function AiAssistantProvider({ children, apiBase, wsUrl, tourBasePath, homePath, }: AiAssistantProviderProps): react.JSX.Element;
+declare function AiAssistantProvider({ children, apiBase, wsUrl, tourBasePath, homePath, shell, }: AiAssistantProviderProps): react.JSX.Element;
 
 type AiAssistantConfig = {
     /** HTTP API prefix, e.g. https://apiv2.totus.club/api or /api */

@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect } from 'react'
 import { Database, Sparkles, MessageCircle } from 'lucide-react'
 import { TourGrid } from '@/components/TourGrid'
 import { SchemaVisualizer } from '@/components/SchemaVisualizer'
@@ -15,10 +14,6 @@ export function AiHomePage() {
   const setOpen = useAssistantStore((s) => s.setOpen)
 
   const hasTours = highlightedTours.length > 0
-
-  useEffect(() => {
-    setOpen(true)
-  }, [setOpen])
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 lg:px-6">

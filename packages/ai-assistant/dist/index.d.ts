@@ -38,14 +38,7 @@ declare function AiTourDetailPage({ tourId, selectedRoom, }: {
     selectedRoom?: string | null;
 }): react.JSX.Element;
 
-type ChatWidgetProps = {
-    /** `floating` — угол экрана; `fullscreen` — на весь экран (для kedam `/ai`) */
-    layout?: 'floating' | 'fullscreen';
-    /** Ссылка «на сайт» в шапке fullscreen-режима */
-    siteHref?: string;
-    siteLabel?: string;
-};
-declare function ChatWidget({ layout, siteHref, siteLabel, }: ChatWidgetProps): react.JSX.Element;
+declare function ChatWidget(): react.JSX.Element;
 
 type TourCategory = 'adventure' | 'cultural' | 'food' | 'relaxation' | 'nightlife' | 'family';
 type DurationFilter = 'half-day' | 'full-day' | 'multi-day';
@@ -299,4 +292,4 @@ interface ChatSession {
 }
 declare const useAssistantStore: zustand.UseBoundStore<zustand.StoreApi<AssistantState>>;
 
-export { type AiAssistantConfig, AiAssistantProvider, type AiAssistantProviderProps, AiHomePage, AiTourDetailPage, type AvailabilityResponse, type BookingRequest, type BookingResponse, ChatMessage, ChatWidget, type ChatWidgetProps, type DestinationCard, type DurationFilter, type ItineraryItem, type Location, QuickActions, type Review, type RoomCard, type RoomCardsPayload, type SchemaColumn, type SchemaTable, SchemaVisualizer, type SearchFilters, type ToolCall, type Tour, TourCard, type TourCategory, TourGrid, type WsClientMessage, type WsServerMessage, configureAiAssistant, getAiConfig, getApiBase, getTourHref, getWsUrl, useAssistant, useAssistantStore, useWebSocket };
+export { type AiAssistantConfig, AiAssistantProvider, type AiAssistantProviderProps, AiHomePage, AiTourDetailPage, type AvailabilityResponse, type BookingRequest, type BookingResponse, ChatMessage, ChatWidget, type DestinationCard, type DurationFilter, type ItineraryItem, type Location, QuickActions, type Review, type RoomCard, type RoomCardsPayload, type SchemaColumn, type SchemaTable, SchemaVisualizer, type SearchFilters, type ToolCall, type Tour, TourCard, type TourCategory, TourGrid, type WsClientMessage, type WsServerMessage, configureAiAssistant, getAiConfig, getApiBase, getTourHref, getWsUrl, useAssistant, useAssistantStore, useWebSocket };

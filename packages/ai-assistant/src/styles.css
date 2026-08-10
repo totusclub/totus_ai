@@ -1,9 +1,10 @@
 /*
  * Embeddable styles for kedam-WEB / any host app.
- * - No Tailwind preflight (avoids breaking host site buttons/inputs)
- * - Utilities nested under .totus-ai-root + !important so they win over host CSS
+ * - No Tailwind preflight (avoids breaking host site)
+ * - Utilities nested under .totus-ai-root and emitted UNLAYERED so they beat
+ *   host rules like `* { margin:0; padding:0 }` (unlayered beats @layer)
  */
-@layer theme, utilities;
+@layer theme, base;
 
 @import "tailwindcss/theme.css" layer(theme);
 
@@ -50,10 +51,27 @@
   }
 }
 
-@layer utilities {
-  .totus-ai-root {
-    @tailwind utilities important;
+@layer base {
+  .totus-ai-root button,
+  .totus-ai-root input,
+  .totus-ai-root textarea {
+    font: inherit;
+    color: inherit;
   }
+
+  .totus-ai-root button {
+    cursor: pointer;
+    appearance: none;
+  }
+
+  .totus-ai-root textarea {
+    appearance: none;
+  }
+}
+
+/* Unlayered on purpose — must win over host global CSS */
+.totus-ai-root {
+  @tailwind utilities;
 }
 
 .totus-ai-root {
@@ -82,24 +100,6 @@
 .totus-ai-root::-webkit-scrollbar-thumb {
   background: var(--color-line);
   border-radius: 8px;
-}
-
-.totus-ai-root button,
-.totus-ai-root input,
-.totus-ai-root textarea {
-  font: inherit;
-  color: inherit;
-}
-
-.totus-ai-root button {
-  cursor: pointer;
-  appearance: none;
-  background: none;
-  border: none;
-}
-
-.totus-ai-root textarea {
-  appearance: none;
 }
 
 .typing-dot {

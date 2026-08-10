@@ -9,9 +9,23 @@ import { QuickActions } from '@/components/QuickActions'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { getApiBase } from '@/config'
+import { cn } from '@/lib/utils'
 
-export function ChatWidget() {
-  const { isOpen, isConnected, isTyping, messages, toggleOpen, send, newChat, openChat } =
+export type ChatWidgetProps = {
+  /** `floating` — угол экрана; `fullscreen` — на весь экран (для kedam `/ai`) */
+  layout?: 'floating' | 'fullscreen'
+  /** Ссылка «на сайт» в шапке fullscreen-режима */
+  siteHref?: string
+  siteLabel?: string
+}
+
+export function ChatWidget({
+  layout = 'floating',
+  siteHref,
+  siteLabel = '← На сайт',
+}: ChatWidgetProps) {
+  const fullscreen = layout === 'fullscreen'
+  const { isOpen, isConnected, isTyping, messages, toggleOpen, send, newChat, openChat, setOpen } =
     useAssistant()
   const chats = useAssistantStore((s) => s.chats)
   const activeChatId = useAssistantStore((s) => s.activeChatId)
@@ -25,12 +39,16 @@ export function ChatWidget() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
+    if (fullscreen) setOpen(true)
+  }, [fullscreen, setOpen])
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isTyping, isOpen])
 
   useEffect(() => {
-    if (isOpen) inputRef.current?.focus()
-  }, [isOpen])
+    if (isOpen || fullscreen) inputRef.current?.focus()
+  }, [isOpen, fullscreen])
 
   useEffect(() => {
     fetch(`${getApiBase()}/health`)
@@ -54,37 +72,61 @@ export function ChatWidget() {
     setDraft('')
   }
 
+  const showPanel = fullscreen || isOpen
+
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
-      {isOpen && (
-        <div className="flex h-[min(640px,calc(100vh-7rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[20px] border border-line bg-paper shadow-pop animate-fade-in-up">
+    <div
+      className={cn(
+        'z-50 flex flex-col',
+        fullscreen
+          ? 'fixed inset-0 items-stretch'
+          : 'fixed bottom-5 right-5 items-end gap-3',
+      )}
+    >
+      {showPanel && (
+        <div
+          className={cn(
+            'flex flex-col overflow-hidden bg-paper',
+            fullscreen
+              ? 'h-full w-full rounded-none border-0'
+              : 'h-[min(640px,calc(100vh-7rem))] w-[min(400px,calc(100vw-2rem))] rounded-[20px] border border-line shadow-pop animate-fade-in-up',
+          )}
+        >
           <header className="flex items-center justify-between border-b border-line bg-paper px-4 py-3">
-            <div className="flex items-center gap-2.5">
+            <div className="flex min-w-0 items-center gap-2.5">
               <span
                 aria-hidden
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-coral to-[#ffb35c] text-base shadow-[0_4px_12px_rgb(255_90_60_/_0.35)]"
               >
                 ☀️
               </span>
-              <div>
-              <p className="font-[family-name:var(--font-display)] text-[13px] font-semibold tracking-tight text-ink">
-                Мила · Тотус клуб
-              </p>
-              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-subtle">
-                {isConnected ? (
-                  <>
-                    <Wifi className="h-3 w-3 text-ok" />
-                    {kimiOn ? 'Онлайн · подбор туров' : 'Локальный режим'}
-                  </>
-                ) : (
-                  <>
-                    <WifiOff className="h-3 w-3 text-gold" /> Переподключение…
-                  </>
-                )}
-              </p>
+              <div className="min-w-0">
+                <p className="font-[family-name:var(--font-display)] text-[13px] font-semibold tracking-tight text-ink">
+                  Мила · Тотус клуб
+                </p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-subtle">
+                  {isConnected ? (
+                    <>
+                      <Wifi className="h-3 w-3 text-ok" />
+                      {kimiOn ? 'Онлайн · подбор туров' : 'Локальный режим'}
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="h-3 w-3 text-gold" /> Переподключение…
+                    </>
+                  )}
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
+              {fullscreen && siteHref ? (
+                <a
+                  href={siteHref}
+                  className="mr-1 px-2 text-xs font-semibold text-sea hover:underline"
+                >
+                  {siteLabel}
+                </a>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"
@@ -105,15 +147,17 @@ export function ChatWidget() {
               >
                 <Plus className="h-4 w-4" />
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={toggleOpen}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              {!fullscreen && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={toggleOpen}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </header>
 
@@ -155,7 +199,12 @@ export function ChatWidget() {
             </div>
           )}
 
-          <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
+          <div
+            className={cn(
+              'flex-1 space-y-3 overflow-y-auto px-3 py-4',
+              fullscreen && 'mx-auto w-full max-w-3xl px-4 sm:px-6',
+            )}
+          >
             {messages.map((message) => (
               <ChatMessage key={message.id} message={message} />
             ))}
@@ -174,7 +223,12 @@ export function ChatWidget() {
             <div ref={bottomRef} />
           </div>
 
-          <div className="space-y-2 border-t border-line p-3">
+          <div
+            className={cn(
+              'space-y-2 border-t border-line p-3',
+              fullscreen && 'mx-auto w-full max-w-3xl px-4 sm:px-6 sm:pb-5',
+            )}
+          >
             <QuickActions
               onSelect={(prompt) => {
                 send(prompt)
@@ -212,14 +266,16 @@ export function ChatWidget() {
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={toggleOpen}
-        className="group flex h-14 w-14 items-center justify-center rounded-full border-0 bg-coral text-white shadow-[0_10px_28px_rgb(255_90_60_/_0.4)] transition hover:scale-105 hover:bg-coral-deep"
-        aria-label={isOpen ? 'Закрыть чат' : 'Открыть чат'}
-      >
-        {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
-      </button>
+      {!fullscreen && (
+        <button
+          type="button"
+          onClick={toggleOpen}
+          className="group flex h-14 w-14 items-center justify-center rounded-full border-0 bg-coral text-white shadow-[0_10px_28px_rgb(255_90_60_/_0.4)] transition hover:scale-105 hover:bg-coral-deep"
+          aria-label={isOpen ? 'Закрыть чат' : 'Открыть чат'}
+        >
+          {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+        </button>
+      )}
     </div>
   )
 }

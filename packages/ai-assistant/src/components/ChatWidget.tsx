@@ -215,7 +215,7 @@ export function ChatWidget() {
       <button
         type="button"
         onClick={toggleOpen}
-        className="group flex h-14 w-14 items-center justify-center rounded-full bg-coral text-white shadow-[0_10px_28px_rgb(255_90_60_/_0.4)] transition hover:scale-105 hover:bg-coral-deep"
+        className="group flex h-14 w-14 items-center justify-center rounded-full border-0 bg-coral text-white shadow-[0_10px_28px_rgb(255_90_60_/_0.4)] transition hover:scale-105 hover:bg-coral-deep"
         aria-label={isOpen ? 'Закрыть чат' : 'Открыть чат'}
       >
         {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}

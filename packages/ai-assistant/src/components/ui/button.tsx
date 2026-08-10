@@ -8,12 +8,12 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-coral text-white hover:bg-coral-deep shadow-[0_8px_20px_rgb(255_90_60_/_0.28)] hover:shadow-[0_10px_26px_rgb(255_90_60_/_0.36)]',
-        secondary: 'bg-sea text-white hover:bg-[#0a6a73]',
+          'border-0 bg-coral text-white hover:bg-coral-deep shadow-[0_8px_20px_rgb(255_90_60_/_0.28)] hover:shadow-[0_10px_26px_rgb(255_90_60_/_0.36)]',
+        secondary: 'border-0 bg-sea text-white hover:bg-[#0a6a73]',
         outline:
-          'border border-line bg-paper text-ink hover:border-coral/60 hover:text-coral',
-        ghost: 'text-subtle hover:bg-sand hover:text-ink',
-        danger: 'bg-danger text-white hover:bg-[#c13424]',
+          'border border-solid border-line bg-paper text-ink hover:border-coral/60 hover:text-coral',
+        ghost: 'border-0 bg-transparent text-subtle hover:bg-sand hover:text-ink',
+        danger: 'border-0 bg-danger text-white hover:bg-[#c13424]',
       },
       size: {
         default: 'h-11 px-5',

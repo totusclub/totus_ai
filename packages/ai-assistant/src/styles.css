@@ -4,7 +4,7 @@
  * - Utilities nested under .totus-ai-root and emitted UNLAYERED so they beat
  *   host rules like `* { margin:0; padding:0 }` (unlayered beats @layer)
  */
-@layer theme, base;
+@layer theme;
 
 @import "tailwindcss/theme.css" layer(theme);
 
@@ -51,22 +51,22 @@
   }
 }
 
-@layer base {
-  .totus-ai-root button,
-  .totus-ai-root input,
-  .totus-ai-root textarea {
-    font: inherit;
-    color: inherit;
-  }
+/* Form/button reset must be unlayered so it beats host CSS + UA button borders. */
+.totus-ai-root button,
+.totus-ai-root input,
+.totus-ai-root textarea {
+  font: inherit;
+  color: inherit;
+  background-color: transparent;
+}
 
-  .totus-ai-root button {
-    cursor: pointer;
-    appearance: none;
-  }
+.totus-ai-root button {
+  cursor: pointer;
+  appearance: none;
+}
 
-  .totus-ai-root textarea {
-    appearance: none;
-  }
+.totus-ai-root textarea {
+  appearance: none;
 }
 
 /* Unlayered on purpose — must win over host global CSS */
@@ -87,6 +87,8 @@
 .totus-ai-root *::before,
 .totus-ai-root *::after {
   box-sizing: border-box;
+  /* Tailwind-preflight equivalent: zero border width, solid style for utilities */
+  border: 0 solid;
 }
 
 .totus-ai-root {

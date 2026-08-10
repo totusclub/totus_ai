@@ -1,4 +1,5 @@
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+'use client'
+
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -16,15 +17,22 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAssistantStore } from '@/stores/assistantStore'
+import { getAiConfig } from '@/config'
 
-export function TourDetailPage() {
-  const { id = '' } = useParams()
+export function AiTourDetailPage({
+  tourId,
+  selectedRoom = null,
+}: {
+  tourId: string
+  selectedRoom?: string | null
+}) {
   const setOpen = useAssistantStore((s) => s.setOpen)
+  const homeHref = getAiConfig().homePath || '/'
 
   const { data: tour, isLoading, error } = useQuery({
-    queryKey: ['tour', id],
-    queryFn: () => getTour(id),
-    enabled: Boolean(id),
+    queryKey: ['tour', tourId],
+    queryFn: () => getTour(tourId),
+    enabled: Boolean(tourId),
   })
 
   const bookInChat = () => {
@@ -52,9 +60,9 @@ export function TourDetailPage() {
     return (
       <div className="mx-auto max-w-lg px-4 py-20 text-center">
         <p className="text-lg text-ink">Тур не найден</p>
-        <Link to="/" className="mt-4 inline-block text-sea hover:underline">
+        <a href={homeHref || '/'} className="mt-4 inline-block text-sea hover:underline">
           На главную
-        </Link>
+        </a>
       </div>
     )
   }
@@ -63,13 +71,13 @@ export function TourDetailPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 lg:px-6">
-      <Link
-        to="/"
+      <a
+        href={homeHref || '/'}
         className="mb-6 inline-flex items-center gap-2 text-sm text-subtle transition hover:text-coral"
       >
         <ArrowLeft className="h-4 w-4" />
         Все туры
-      </Link>
+      </a>
 
       <div className="overflow-hidden rounded-[12px] border border-line bg-paper backdrop-blur-md">
         <div className="relative flex h-56 items-center justify-center overflow-hidden bg-gradient-to-br from-sand via-page to-sea-soft sm:h-64">
@@ -134,7 +142,7 @@ export function TourDetailPage() {
             </ol>
           </section>
 
-          <RoomTypesSection tourId={tour.id} />
+          <RoomTypesSection tourId={tour.id} selectedRoom={selectedRoom} />
 
           <div className="grid gap-6 sm:grid-cols-2">
             <section>
@@ -225,9 +233,14 @@ export function TourDetailPage() {
   )
 }
 
-function RoomTypesSection({ tourId }: { tourId: string }) {
-  const [searchParams] = useSearchParams()
-  const selectedRoom = searchParams.get('room')?.toLowerCase() ?? null
+function RoomTypesSection({
+  tourId,
+  selectedRoom,
+}: {
+  tourId: string
+  selectedRoom?: string | null
+}) {
+  const roomKey = selectedRoom?.toLowerCase() ?? null
   const selectedRef = useRef<HTMLLIElement | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -240,12 +253,11 @@ function RoomTypesSection({ tourId }: { tourId: string }) {
 
   const rooms = data?.rooms ?? []
 
-  // If the chat sent the user here for a specific room — scroll to it.
   useEffect(() => {
-    if (selectedRoom && selectedRef.current) {
+    if (roomKey && selectedRef.current) {
       selectedRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
-  }, [selectedRoom, rooms.length])
+  }, [roomKey, rooms.length])
 
   if (!isLoading && rooms.length === 0) return null
 
@@ -268,9 +280,9 @@ function RoomTypesSection({ tourId }: { tourId: string }) {
           {rooms.map((room) => (
             <li
               key={room.room_type}
-              ref={room.room_type.toLowerCase() === selectedRoom ? selectedRef : undefined}
+              ref={room.room_type.toLowerCase() === roomKey ? selectedRef : undefined}
               className={`rounded-[12px] border p-4 ${
-                room.room_type.toLowerCase() === selectedRoom
+                room.room_type.toLowerCase() === roomKey
                   ? 'border-sea bg-sea-soft ring-1 ring-sea/40'
                   : 'border-line bg-paper'
               }`}

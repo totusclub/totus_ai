@@ -1,39 +1,89 @@
-# Tour Assistant
+# Totus AI v2 (Мила)
 
-AI-powered tour discovery using **real Level.Travel package search** + Kimi chat (Russian).
+AI tour assistant — **frontend + API** in one repo.
 
-## Stack
+| Service | Local port | Production host |
+|---------|------------|-----------------|
+| API + WebSocket | `3011` | `https://apiv2.totus.club` |
+| Next.js UI | `3012` | `https://ai.totus.club` |
 
-- **Frontend:** React + TypeScript + Vite, Tailwind, React Query, Zustand, WebSocket chat
-- **Backend:** Express + Level.Travel API (`enqueue` → `status` → `get_grouped_hotels`) + Kimi tools
+## Packages
 
-No mock tour catalog — hotels come only from Level.Travel.
+- `@tosmedia/ai-assistant` — publishable React UI (`packages/ai-assistant`)
+- `server/` — Express + LLM + Level.Travel + WebSocket
+- `src/app/` — thin Next.js host for `ai.totus.club`
 
-## Quick start
+## Quick start (local)
 
 ```bash
 cp .env.example .env
-# set MOONSHOT_API_KEY and LEVEL_TRAVEL_API_KEY
+# fill DEEPSEEK_API_KEY + LEVEL_TRAVEL_API_KEY
 npm install
+npm run build:assistant
 npm run dev
 ```
 
-- App: http://localhost:5173  
-- API: http://localhost:3010  
+- Front: http://localhost:3012  
+- API health: http://localhost:3011/api/health  
+- WS: `ws://localhost:3011/ws/assistant`
 
-## Level.Travel
+## Production env (on server)
 
-```bash
-LEVEL_TRAVEL_API_KEY=your-raw-token   # or Token token="..."
-LEVEL_TRAVEL_API_VERSION=3.7
+```env
+PORT=3011
+CORS_ORIGINS=https://ai.totus.club,https://totus.club,https://www.totus.club
+
+NEXT_PUBLIC_API_URL=https://apiv2.totus.club/api
+NEXT_PUBLIC_WS_URL=wss://apiv2.totus.club/ws/assistant
 ```
 
-Search flow: enqueue → poll status → grouped hotels (RUB prices).
-
-## Kimi
-
 ```bash
-MOONSHOT_API_KEY=sk-...
+npm install
+npm run build
+npm run start   # API :3011 + Next :3012
 ```
 
-Tools: `search_tours`, `get_tour_details`, `check_availability`, `create_booking`.
+Nginx: `ai.totus.club` → `127.0.0.1:3012`, `apiv2.totus.club` → `127.0.0.1:3011` (HTTP + WebSocket upgrade for `/ws/assistant`).
+
+## Use in kedam-WEB (later)
+
+Publish / install the UI package:
+
+```bash
+# from this repo (GitHub Packages)
+npm run publish:assistant
+
+# in kedam-WEB
+npm install @tosmedia/ai-assistant@^1.0.0
+```
+
+```tsx
+import {
+  AiAssistantProvider,
+  AiHomePage,
+  ChatWidget,
+} from '@tosmedia/ai-assistant'
+import '@tosmedia/ai-assistant/styles.css'
+
+export default function AiPage() {
+  return (
+    <AiAssistantProvider
+      apiBase="https://apiv2.totus.club/api"
+      wsUrl="wss://apiv2.totus.club/ws/assistant"
+      tourBasePath="/ai/tours"
+      homePath="/ai"
+    >
+      <AiHomePage />
+      <ChatWidget />
+    </AiAssistantProvider>
+  )
+}
+```
+
+Or install from git (uses built `dist/`):
+
+```bash
+npm install "github:tosmedia/totus_ai_v2#main:packages/ai-assistant"
+```
+
+See [РАЗВЁРТЫВАНИЕ.md](./РАЗВЁРТЫВАНИЕ.md) for nginx notes.

@@ -1,3 +1,5 @@
+'use client'
+
 import { useMemo, useState } from 'react'
 import { Database, KeyRound, Link2, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'

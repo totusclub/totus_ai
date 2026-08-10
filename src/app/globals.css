@@ -1,0 +1,8 @@
+@import "@tosmedia/ai-assistant/styles.css";
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: #f5f6f8;
+}

@@ -1,3 +1,5 @@
+'use client'
+
 import { useEffect, useRef, useState } from 'react'
 import { MessageCircle, MessagesSquare, Plus, Send, Trash2, Wifi, WifiOff, X } from 'lucide-react'
 import { useAssistant } from '@/hooks/useAssistant'
@@ -6,7 +8,7 @@ import { ChatMessage } from '@/components/ChatMessage'
 import { QuickActions } from '@/components/QuickActions'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { API_BASE } from '@/lib/constants'
+import { getApiBase } from '@/config'
 
 export function ChatWidget() {
   const { isOpen, isConnected, isTyping, messages, toggleOpen, send, newChat, openChat } =
@@ -31,7 +33,7 @@ export function ChatWidget() {
   }, [isOpen])
 
   useEffect(() => {
-    fetch(`${API_BASE}/health`)
+    fetch(`${getApiBase()}/health`)
       .then((r) => r.json())
       .then((data: { kimi?: { enabled?: boolean } }) => setKimiOn(Boolean(data.kimi?.enabled)))
       .catch(() => setKimiOn(false))

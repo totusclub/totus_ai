@@ -1,4 +1,4 @@
-import { API_BASE } from '@/lib/constants'
+import { getApiBase } from '@/config'
 import type {
   AvailabilityResponse,
   BookingRequest,
@@ -9,7 +9,7 @@ import type {
 } from '@/types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${getApiBase()}${path}`, {
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
   })

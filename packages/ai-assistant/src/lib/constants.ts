@@ -1,10 +1,12 @@
 import type { SearchFilters } from '@/types'
+import { getApiBase } from '@/config'
 
-export const WS_URL =
-  import.meta.env.VITE_WS_URL ??
-  `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/assistant`
+/** @deprecated Use getApiBase() — kept for gradual migration inside the package */
+export const API_BASE = typeof process !== 'undefined'
+  ? process.env.NEXT_PUBLIC_API_URL ?? '/api'
+  : '/api'
 
-export const API_BASE = import.meta.env.VITE_API_URL ?? '/api'
+export { getApiBase }
 
 export const FROM_CITIES = [
   'Moscow',

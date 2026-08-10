@@ -1,37 +1,41 @@
 {
-  "name": "aillm",
+  "name": "totus-ai-v2",
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "concurrently -n server,web -c cyan,magenta \"npm run server\" \"vite\"",
-    "dev:web": "vite",
+    "predev": "npm run build:assistant",
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run server\" \"npm run dev:web\"",
+    "dev:web": "next dev -p 3012",
     "server": "tsx server/index.ts",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:assistant && next build",
+    "build:assistant": "npm run build -w @tosmedia/ai-assistant",
+    "build:web": "next build",
+    "start": "concurrently -n api,web -c cyan,magenta \"npm run server\" \"npm run start:web\"",
+    "start:web": "next start -p 3012",
+    "start:api": "npm run server",
+    "publish:assistant": "npm publish -w @tosmedia/ai-assistant",
     "lint": "oxlint",
-    "preview": "vite preview",
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.3",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
+    "@tosmedia/ai-assistant": "*",
     "cors": "^2.8.6",
-    "date-fns": "^4.4.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "lucide-react": "^1.25.0",
+    "next": "^15.5.2",
     "openai": "^6.48.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.1",
-    "tailwind-merge": "^3.6.0",
     "uuid": "^14.0.1",
-    "ws": "^8.21.1",
-    "zustand": "^5.0.14"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
@@ -39,12 +43,10 @@
     "@types/react-dom": "^19.2.3",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
-    "@vitejs/plugin-react": "^6.0.3",
     "concurrently": "^10.0.3",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.1",
-    "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "typescript": "~5.9.2"
   }
 }

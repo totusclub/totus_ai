@@ -1,3 +1,5 @@
+'use client'
+
 import { useEffect } from 'react'
 import { Database, Sparkles, MessageCircle } from 'lucide-react'
 import { TourGrid } from '@/components/TourGrid'
@@ -5,13 +7,7 @@ import { SchemaVisualizer } from '@/components/SchemaVisualizer'
 import { Button } from '@/components/ui/button'
 import { useAssistantStore } from '@/stores/assistantStore'
 
-// Single source of truth for the catalog: the assistant.
-// There is NO independent SearchPanel/useTourSearch here anymore. The grid on
-// this page mirrors exactly what the assistant found in its last search
-// (`highlightedTours` in the store), so the results on screen always match the
-// chat. This removes the second, competing Level.Travel search that used to
-// re-run on its own and show unrelated hotels.
-export function HomePage() {
+export function AiHomePage() {
   const highlightedTours = useAssistantStore((s) => s.highlightedTours)
   const isTyping = useAssistantStore((s) => s.isTyping)
   const showSchema = useAssistantStore((s) => s.showSchema)
@@ -20,7 +16,6 @@ export function HomePage() {
 
   const hasTours = highlightedTours.length > 0
 
-  // Open the assistant automatically on first load — it's the only way to search.
   useEffect(() => {
     setOpen(true)
   }, [setOpen])

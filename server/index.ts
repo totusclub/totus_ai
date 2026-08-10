@@ -28,7 +28,13 @@ import {
 import { logDir, readRecentLog, readSessions } from './chatLog.js'
 import type { BookingRequest, SearchFilters, Tour } from './types.js'
 
-const PORT = Number(process.env.PORT ?? 3010)
+const PORT = Number(process.env.PORT ?? 3011)
+const CORS_ORIGINS = (process.env.CORS_ORIGINS ??
+  'http://localhost:3012,https://ai.totus.club,https://totus.club,https://www.totus.club')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
 const bookings: Array<
   BookingRequest & {
     booking_id: string
@@ -39,7 +45,19 @@ const bookings: Array<
 > = []
 
 const app = express()
-app.use(cors())
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow non-browser clients (no Origin) and configured frontends.
+      if (!origin || CORS_ORIGINS.includes('*') || CORS_ORIGINS.includes(origin)) {
+        callback(null, true)
+        return
+      }
+      callback(null, false)
+    },
+    credentials: true,
+  }),
+)
 app.use(express.json())
 
 async function searchTours(query: Partial<SearchFilters>): Promise<Tour[]> {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { WS_URL } from '@/lib/constants'
+import { getWsUrl } from '@/config'
 import { useAssistantStore } from '@/stores/assistantStore'
 import type { WsServerMessage } from '@/types'
 import { uid } from '@/lib/utils'
@@ -193,7 +193,7 @@ export function useWebSocket(enabled = true) {
       return
     }
 
-    const ws = new WebSocket(WS_URL)
+    const ws = new WebSocket(getWsUrl())
     wsRef.current = ws
 
     ws.onopen = () => setConnected(true)

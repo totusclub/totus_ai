@@ -1,5 +1,7 @@
-import { Link } from 'react-router-dom'
+'use client'
+
 import type { ChatMessage as ChatMessageType, RoomCard, Tour } from '@/types'
+import { getTourHref } from '@/config'
 import { mealLabel } from '@/lib/meals'
 import { formatPrice } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -159,12 +161,12 @@ function HotelCard({ tour }: { tour: Tour }) {
           <p className="text-[11px] text-faint">цена за тур</p>
           <p className="font-semibold text-coral">от {formatPrice(tour.price, tour.currency)}</p>
         </div>
-        <Link
-          to={`/tours/${tour.id}`}
+        <a
+          href={getTourHref(tour.id)}
           className="rounded-lg bg-coral px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-coral-deep"
         >
           Перейти к бронированию
-        </Link>
+        </a>
       </div>
       {tour.comment && (
         <div className="border-t border-line px-2.5 py-2">
@@ -187,7 +189,7 @@ function RoomCardView({
   hotelId: number
   hotelImage?: string
 }) {
-  const internalHref = `/tours/lt_${hotelId}?room=${encodeURIComponent(room.room_type)}`
+  const internalHref = getTourHref(`lt_${hotelId}`, room.room_type)
   const meals = Object.entries(room.meals).sort((a, b) => a[1] - b[1])
 
   return (
@@ -223,12 +225,12 @@ function RoomCardView({
               К бронированию
             </a>
           ) : (
-            <Link
-              to={internalHref}
+            <a
+              href={internalHref}
               className="rounded-lg bg-coral px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-coral-deep"
             >
               К бронированию
-            </Link>
+            </a>
           )}
         </div>
       </div>

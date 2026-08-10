@@ -7,9 +7,15 @@
 
 # Зависимости и сборка
 node_modules/
-dist/
+/dist/
 dist-ssr/
+.next/
+out/
 *.local
+
+# Publishable package build output IS committed (for git/npm install from this repo)
+!packages/*/dist/
+!packages/*/dist/**
 
 # Логи
 logs/

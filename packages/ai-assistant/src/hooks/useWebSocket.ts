@@ -196,7 +196,13 @@ export function useWebSocket(enabled = true) {
     const ws = new WebSocket(getWsUrl())
     wsRef.current = ws
 
-    ws.onopen = () => setConnected(true)
+    ws.onopen = () => {
+      setConnected(true)
+      // The server session died with the old socket. If the customer already
+      // has a dialogue on screen, replay it so the assistant keeps context.
+      const payload = buildRestorePayload()
+      if (payload.messages.length) ws.send(JSON.stringify(payload))
+    }
     ws.onclose = () => {
       setConnected(false)
       // Only auto-reconnect if the close wasn't triggered by unmount/cleanup.
@@ -256,17 +262,38 @@ export function useWebSocket(enabled = true) {
 
   /** Reopen an old chat and replay its history so the assistant keeps context. */
   const openChat = useCallback((id: string) => {
-    const messages = useAssistantStore.getState().switchChat(id)
+    useAssistantStore.getState().switchChat(id)
     if (wsRef.current?.readyState !== WebSocket.OPEN) return
-    const history = messages
-      .filter((m) => m.content.trim() && m.id !== 'welcome')
-      .map((m) => ({ role: m.role, content: m.content }))
-    wsRef.current.send(JSON.stringify({ type: 'restore', messages: history }))
+    wsRef.current.send(JSON.stringify(buildRestorePayload()))
   }, [])
 
   const streamingId = useAssistantStore((s) => s.streamingId)
 
   return { send, reset, newChat, openChat, streamingId }
+}
+
+
+/**
+ * Restore payload for the server: visible texts PLUS hotels from card
+ * metadata. Texts alone are not enough — hotel names live in
+ * metadata.tour_results, so after a reconnect the model could not resolve
+ * "этот отель" and asked the customer to repeat the hotel name.
+ */
+function buildRestorePayload() {
+  const messages = useAssistantStore.getState().messages
+  const history = messages
+    .filter((m) => m.content.trim() && m.id !== 'welcome' && !m.id.startsWith('welcome'))
+    .map((m) => ({ role: m.role, content: m.content }))
+  const hotels: Array<{ id?: string; name: string }> = []
+  for (const m of messages) {
+    for (const t of m.metadata?.tour_results ?? []) {
+      if (!t?.name) continue
+      const idx = hotels.findIndex((h) => h.name === t.name)
+      if (idx !== -1) hotels.splice(idx, 1) // переносим в конец: свежие последними
+      hotels.push({ id: t.id, name: t.name })
+    }
+  }
+  return { type: 'restore', messages: history.slice(-40), hotels: hotels.slice(-8) }
 }
 
 /** Friendly, user-facing wording for the current step. */

@@ -5,7 +5,7 @@ import { createServer } from 'http'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { randomUUID } from 'crypto'
 import { SCHEMA_TABLES } from './data.js'
-import { handleAssistantMessage, createSession, type Session } from './assistant.js'
+import { handleAssistantMessage, createSession, type Session, seedRestoredSession } from './assistant.js'
 import { llmStatus } from './llm.js'
 import {
   BUILD_TAG,
@@ -288,6 +288,7 @@ wss.on('connection', (ws) => {
       type?: string
       content?: string
       messages?: Array<{ role?: string; content?: string }>
+      hotels?: Array<{ id?: string | number; name?: string }>
     }
     try {
       payload = JSON.parse(String(raw))
@@ -306,13 +307,7 @@ wss.on('connection', (ws) => {
     // conversation was about the moment the customer reopens it.
     if (payload.type === 'restore') {
       const restored = createSession()
-      const history = Array.isArray(payload.messages) ? payload.messages : []
-      for (const m of history.slice(-40)) {
-        const role = m?.role === 'assistant' ? 'assistant' : 'user'
-        const content = typeof m?.content === 'string' ? m.content.trim() : ''
-        if (!content) continue
-        restored.history.push({ role, content })
-      }
+      seedRestoredSession(restored, payload)
       sessions.set(ws, restored)
       return
     }

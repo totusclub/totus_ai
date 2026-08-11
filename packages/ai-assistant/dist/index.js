@@ -1031,7 +1031,11 @@ function useWebSocket(enabled = true) {
     }
     const ws = new WebSocket(getWsUrl());
     wsRef.current = ws;
-    ws.onopen = () => setConnected(true);
+    ws.onopen = () => {
+      setConnected(true);
+      const payload = buildRestorePayload();
+      if (payload.messages.length) ws.send(JSON.stringify(payload));
+    };
     ws.onclose = () => {
       setConnected(false);
       if (!manualCloseRef.current) {
@@ -1082,13 +1086,26 @@ function useWebSocket(enabled = true) {
     }
   }, []);
   const openChat = useCallback((id) => {
-    const messages = useAssistantStore.getState().switchChat(id);
+    useAssistantStore.getState().switchChat(id);
     if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-    const history = messages.filter((m) => m.content.trim() && m.id !== "welcome").map((m) => ({ role: m.role, content: m.content }));
-    wsRef.current.send(JSON.stringify({ type: "restore", messages: history }));
+    wsRef.current.send(JSON.stringify(buildRestorePayload()));
   }, []);
   const streamingId = useAssistantStore((s) => s.streamingId);
   return { send, reset, newChat: newChat2, openChat, streamingId };
+}
+function buildRestorePayload() {
+  const messages = useAssistantStore.getState().messages;
+  const history = messages.filter((m) => m.content.trim() && m.id !== "welcome" && !m.id.startsWith("welcome")).map((m) => ({ role: m.role, content: m.content }));
+  const hotels = [];
+  for (const m of messages) {
+    for (const t of m.metadata?.tour_results ?? []) {
+      if (!t?.name) continue;
+      const idx = hotels.findIndex((h) => h.name === t.name);
+      if (idx !== -1) hotels.splice(idx, 1);
+      hotels.push({ id: t.id, name: t.name });
+    }
+  }
+  return { type: "restore", messages: history.slice(-40), hotels: hotels.slice(-8) };
 }
 function friendlyStatus(toolName) {
   switch (toolName) {

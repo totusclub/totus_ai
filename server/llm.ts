@@ -861,12 +861,19 @@ export async function handleLlmMessage(
   const client = getClient()
   const model = getModel()
   const messageId = randomUUID()
-  const systemPrompt = buildTotusSystemPrompt()
+  const basePrompt = buildTotusSystemPrompt()
+  // A restored dialogue carries a note about hotels already shown — without it
+  // "этот отель" is unresolvable, because card names never appear in the text.
+  const systemPrompt = session.contextNote
+    ? `${basePrompt}\n\n## Контекст восстановленного диалога\n${session.contextNote}`
+    : basePrompt
 
   if (!session.llmMessages) {
     session.llmMessages = [{ role: 'system', content: systemPrompt }]
   } else if (session.llmMessages[0]?.role === 'system') {
     session.llmMessages[0] = { role: 'system', content: systemPrompt }
+  } else {
+    session.llmMessages.unshift({ role: 'system', content: systemPrompt })
   }
 
   session.history.push({ role: 'user', content: userText })

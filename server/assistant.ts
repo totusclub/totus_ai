@@ -25,6 +25,8 @@ export interface Session {
   guestNames?: string[]
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   llmMessages?: ChatCompletionMessageParam[]
+  /** Injected into the system prompt after a restore: hotels already shown. */
+  contextNote?: string
   /** Active Level.Travel search context for offers / actualize */
   ltRequestId?: string
   ltOkOperators?: string[]
@@ -43,6 +45,52 @@ export interface AssistantDeps {
   }) => Tour[] | Promise<Tour[]>
   getTour: (id: string) => Tour | undefined
   createBooking: (body: BookingRequest) => BookingResponse
+}
+
+/**
+ * Rebuild a fresh session from the history the browser kept.
+ *
+ * WHY: the WebSocket drops on idle/reload, the server session dies with it,
+ * and the widget silently reconnects. The customer still SEES the whole chat,
+ * but the model started from scratch — "покажи отзывы на этот отель" got
+ * "о каком отеле речь?". The killer detail: restore used to fill only
+ * session.history, while the model reads session.llmMessages — so even a
+ * manual restore left the model with amnesia.
+ *
+ * Hotels come separately because card data (names/ids) lives in message
+ * metadata, not in the text — texts alone often never name the hotel.
+ */
+export function seedRestoredSession(
+  session: Session,
+  payload: {
+    messages?: Array<{ role?: string; content?: string }>
+    hotels?: Array<{ id?: string | number; name?: string }>
+  },
+) {
+  const history = Array.isArray(payload.messages) ? payload.messages : []
+  session.llmMessages = [{ role: 'system', content: '' }]
+  for (const m of history.slice(-40)) {
+    const role = m?.role === 'assistant' ? 'assistant' : 'user'
+    const content = typeof m?.content === 'string' ? m.content.trim() : ''
+    if (!content) continue
+    session.history.push({ role, content })
+    session.llmMessages.push({ role, content })
+  }
+
+  const hotels = (Array.isArray(payload.hotels) ? payload.hotels : [])
+    .map((h) => {
+      const name = typeof h?.name === 'string' ? h.name.trim() : ''
+      const id = String(h?.id ?? '').replace(/^lt_/, '')
+      if (!name) return null
+      return /^\d+$/.test(id) ? `${name} (id ${id})` : name
+    })
+    .filter((x): x is string => Boolean(x))
+    .slice(-8)
+  if (hotels.length) {
+    session.contextNote =
+      `Диалог продолжается после переподключения. Клиенту уже показывались отели (в порядке показа, свежие в конце): ${hotels.join('; ')}. ` +
+      'Слова «этот отель», «про него», «там» без названия относятся к ПОСЛЕДНЕМУ из списка. Не переспрашивай название — работай с ним; id подставляй в инструменты как hotel_id.'
+  }
 }
 
 export function createSession(): Session {

@@ -1827,6 +1827,21 @@ export async function fetchHotelInfo(hotelId: number): Promise<HotelInfo | null>
 const TOTUS_SITE = (process.env.TOTUS_SITE_URL || 'https://totus.club').replace(/\/+$/, '')
 
 /**
+ * Build kids_ages list for hotel-details URLs.
+ * Always one age entry per child (repeat last age if fewer ages than kids).
+ */
+function normalizeKidsAgesForUrl(kids?: number, kidsAges?: number[]): number[] {
+  const ages = (kidsAges ?? []).filter((n) => Number.isFinite(n) && n >= 0)
+  const count = Math.max(Number(kids) || 0, ages.length)
+  if (count <= 0 || ages.length === 0) return ages
+  if (ages.length >= count) return ages.slice(0, count)
+  const padded = [...ages]
+  const last = padded[padded.length - 1]
+  while (padded.length < count) padded.push(last)
+  return padded
+}
+
+/**
  * Build a link to the CLIENT'S OWN hotel page (totus.club/hotel-details).
  * Mirrors the exact query format their site uses, e.g.
  *   /hotel-details?hotel_id=9223758&from_city=Moscow&from_country=RU
@@ -1859,12 +1874,11 @@ export function buildTotusHotelUrl(opts: {
   q.set('to_country', params.to_country)
   q.set('to_city', params.to_city ?? '')
   q.set('adults', String(params.adults))
-  // kedam /hotel-details expects repeated kids_ages params, e.g.
+  // kedam /hotel-details expects ONE kids_ages per child, e.g.
+  //   kids=2&kids_ages=3&kids_ages=3
   //   kids=2&kids_ages=3&kids_ages=6
-  // (not kids_ages=3,6 — that breaks age parsing on the site)
-  const kidsAges = (params.kids_ages ?? []).filter((n) => Number.isFinite(n))
-  const kidsCount = kidsAges.length > 0 ? kidsAges.length : (params.kids ?? 0)
-  q.set('kids', String(kidsCount))
+  const kidsAges = normalizeKidsAgesForUrl(params.kids, params.kids_ages)
+  q.set('kids', String(kidsAges.length > 0 ? kidsAges.length : (params.kids ?? 0)))
   for (const age of kidsAges) {
     q.append('kids_ages', String(age))
   }

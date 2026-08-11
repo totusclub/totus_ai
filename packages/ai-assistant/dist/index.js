@@ -58,6 +58,22 @@ function formatPrice(price, currency = "USD") {
     maximumFractionDigits: 0
   }).format(price);
 }
+function formatNightsRu(nights) {
+  const n = Math.abs(Math.trunc(nights));
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} \u043D\u043E\u0447\u044C`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} \u043D\u043E\u0447\u0438`;
+  return `${n} \u043D\u043E\u0447\u0435\u0439`;
+}
+function formatDurationLabel(duration, durationHours) {
+  const m = duration.match(/(\d+)\s*nights?/i);
+  if (m) return formatNightsRu(Number(m[1]));
+  if (durationHours && durationHours >= 24) {
+    return formatNightsRu(Math.round(durationHours / 24));
+  }
+  return duration;
+}
 function uid(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -176,13 +192,10 @@ function TourCard({ tour }) {
       /* @__PURE__ */ jsxs("div", { className: "mt-auto flex flex-wrap items-center gap-3 text-xs text-subtle", children: [
         /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-1", children: [
           /* @__PURE__ */ jsx(Clock, { className: "h-3.5 w-3.5" }),
-          tour.duration
+          formatDurationLabel(tour.duration, tour.duration_hours)
         ] }),
-        tour.stars ? /* @__PURE__ */ jsxs("span", { children: [
-          tour.stars,
-          "\u2605"
-        ] }) : null,
-        tour.rating > 0 && /* @__PURE__ */ jsxs("span", { className: "text-gold", children: [
+        tour.stars ? /* @__PURE__ */ jsx("span", { className: "text-coral", children: "\u2605".repeat(Math.min(tour.stars, 5)) }) : null,
+        tour.rating > 0 && /* @__PURE__ */ jsxs("span", { className: "text-coral", children: [
           "\u2605 ",
           tour.rating,
           tour.review_count ? ` \xB7 ${tour.review_count}` : ""
@@ -1201,17 +1214,20 @@ function HotelCard({ tour }) {
         }
       ),
       /* @__PURE__ */ jsxs("div", { className: "absolute inset-x-0 bottom-0 p-2.5", children: [
-        /* @__PURE__ */ jsxs("p", { className: "font-semibold leading-tight text-ink", children: [
+        /* @__PURE__ */ jsxs("p", { className: "font-semibold leading-tight text-white", children: [
           tour.name,
-          " ",
-          tour.stars ? "\u2605".repeat(Math.min(tour.stars, 5)) : ""
+          tour.stars ? /* @__PURE__ */ jsx("span", { className: "ml-1 text-coral", children: "\u2605".repeat(Math.min(tour.stars, 5)) }) : null
         ] }),
-        /* @__PURE__ */ jsxs("p", { className: "text-xs text-ink/80", children: [
+        /* @__PURE__ */ jsxs("p", { className: "text-xs text-white/85", children: [
           tour.destination,
           " \xB7 ",
-          tour.duration,
-          " \xB7 \u2605 ",
-          tour.rating
+          formatDurationLabel(tour.duration, tour.duration_hours),
+          tour.rating > 0 ? /* @__PURE__ */ jsxs(Fragment, { children: [
+            " \xB7 ",
+            /* @__PURE__ */ jsx("span", { className: "text-coral", children: "\u2605" }),
+            " ",
+            tour.rating
+          ] }) : null
         ] })
       ] })
     ] }),

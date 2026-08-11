@@ -3,7 +3,7 @@
 import { Clock, MapPin } from 'lucide-react'
 import type { Tour } from '@/types'
 import { hotelDetailsHrefFromTour } from '@/lib/bookingHref'
-import { formatPrice } from '@/lib/utils'
+import { formatDurationLabel, formatPrice } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 
 export function TourCard({ tour }: { tour: Tour }) {
@@ -43,11 +43,11 @@ export function TourCard({ tour }: { tour: Tour }) {
         <div className="mt-auto flex flex-wrap items-center gap-3 text-xs text-subtle">
           <span className="flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" />
-            {tour.duration}
+            {formatDurationLabel(tour.duration, tour.duration_hours)}
           </span>
-          {tour.stars ? <span>{tour.stars}★</span> : null}
+          {tour.stars ? <span className="text-coral">{'★'.repeat(Math.min(tour.stars, 5))}</span> : null}
           {tour.rating > 0 && (
-            <span className="text-gold">
+            <span className="text-coral">
               ★ {tour.rating}
               {tour.review_count ? ` · ${tour.review_count}` : ''}
             </span>

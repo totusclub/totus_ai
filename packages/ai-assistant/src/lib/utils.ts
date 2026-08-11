@@ -14,6 +14,26 @@ export function formatPrice(price: number, currency = 'USD') {
   }).format(price)
 }
 
+/** 1 ночь / 2 ночи / 5 ночей */
+export function formatNightsRu(nights: number): string {
+  const n = Math.abs(Math.trunc(nights))
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return `${n} ночь`
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} ночи`
+  return `${n} ночей`
+}
+
+/** "7 nights" / hours → русская подпись для карточек */
+export function formatDurationLabel(duration: string, durationHours?: number): string {
+  const m = duration.match(/(\d+)\s*nights?/i)
+  if (m) return formatNightsRu(Number(m[1]))
+  if (durationHours && durationHours >= 24) {
+    return formatNightsRu(Math.round(durationHours / 24))
+  }
+  return duration
+}
+
 export function matchesDuration(tour: Tour, duration: DurationFilter | 'all') {
   if (duration === 'all') return true
   if (duration === 'half-day') return tour.duration_hours <= 5

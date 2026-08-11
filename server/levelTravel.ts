@@ -592,6 +592,16 @@ function beachSurfaceRu(surface?: string) {
   return undefined
 }
 
+/** 1 ночь / 2 ночи / 5 ночей */
+function formatNightsRu(nights: number): string {
+  const n = Math.abs(Math.trunc(nights))
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return `${n} ночь`
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} ночи`
+  return `${n} ночей`
+}
+
 function mapHotelToTour(
   entry: unknown,
   fallbackDest: string,
@@ -782,7 +792,7 @@ function mapHotelToTour(
     description: desc.slice(0, 500),
     price: price || 0,
     currency,
-    duration: `${nightsFromPrice} nights`,
+    duration: formatNightsRu(nightsFromPrice),
     duration_hours: nightsFromPrice * 24,
     max_group_size: 4,
     rating,

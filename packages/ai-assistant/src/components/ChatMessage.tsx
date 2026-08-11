@@ -2,7 +2,7 @@
 
 import type { ChatMessage as ChatMessageType, RoomCard, Tour } from '@/types'
 import { mealLabel } from '@/lib/meals'
-import { formatPrice } from '@/lib/utils'
+import { formatDurationLabel, formatPrice } from '@/lib/utils'
 import { hotelDetailsHrefFromTour, roomBookingHref } from '@/lib/bookingHref'
 import { Badge } from '@/components/ui/badge'
 
@@ -148,11 +148,20 @@ function HotelCard({ tour }: { tour: Tour }) {
           </span>
         )}
         <div className="absolute inset-x-0 bottom-0 p-2.5">
-          <p className="font-semibold leading-tight text-ink">
-            {tour.name} {tour.stars ? '★'.repeat(Math.min(tour.stars, 5)) : ''}
+          <p className="font-semibold leading-tight text-white">
+            {tour.name}
+            {tour.stars ? (
+              <span className="ml-1 text-coral">{'★'.repeat(Math.min(tour.stars, 5))}</span>
+            ) : null}
           </p>
-          <p className="text-xs text-ink/80">
-            {tour.destination} · {tour.duration} · ★ {tour.rating}
+          <p className="text-xs text-white/85">
+            {tour.destination} · {formatDurationLabel(tour.duration, tour.duration_hours)}
+            {tour.rating > 0 ? (
+              <>
+                {' · '}
+                <span className="text-coral">★</span> {tour.rating}
+              </>
+            ) : null}
           </p>
         </div>
       </div>

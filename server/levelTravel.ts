@@ -1849,8 +1849,15 @@ export function buildTotusHotelUrl(opts: {
   q.set('to_country', params.to_country)
   q.set('to_city', params.to_city ?? '')
   q.set('adults', String(params.adults))
-  q.set('kids', String(params.kids ?? 0))
-  if (params.kids_ages?.length) q.set('kids_ages', params.kids_ages.join(','))
+  // kedam /hotel-details expects repeated kids_ages params, e.g.
+  //   kids=2&kids_ages=3&kids_ages=6
+  // (not kids_ages=3,6 — that breaks age parsing on the site)
+  const kidsAges = (params.kids_ages ?? []).filter((n) => Number.isFinite(n))
+  const kidsCount = kidsAges.length > 0 ? kidsAges.length : (params.kids ?? 0)
+  q.set('kids', String(kidsCount))
+  for (const age of kidsAges) {
+    q.append('kids_ages', String(age))
+  }
   q.set('start_date', start)
   q.set('start_date_from', start)
   q.set('end_date_till', endTill)

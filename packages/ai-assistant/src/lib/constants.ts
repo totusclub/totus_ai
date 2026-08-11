@@ -40,9 +40,9 @@ export const QUICK_ACTIONS = [
   },
   {
     id: 'uai',
-    label: 'What is UAI',
-    labelRu: 'Что такое UAI',
-    prompt: 'Чем UAI отличается от AI? Что лучше для семьи с детьми?',
+    label: 'Ultra all inclusive',
+    labelRu: 'Что такое ультра всё включено',
+    prompt: 'Чем «ультра всё включено» отличается от «всё включено»? Что лучше для семьи с детьми?',
   },
   { id: 'turkey', label: 'Tours to Turkey', labelRu: 'Туры в Турцию', prompt: 'Найди туры в Турцию' },
   { id: 'egypt', label: 'Tours to Egypt', labelRu: 'Туры в Египет', prompt: 'Найди туры в Египет' },

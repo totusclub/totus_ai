@@ -83,6 +83,8 @@ interface Tour {
     price: number;
     currency: string;
     duration: string;
+    /** Client hotel-details URL (totus / kedam), when provided by the API */
+    link?: string;
     duration_hours: number;
     max_group_size: number;
     rating: number;

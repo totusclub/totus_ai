@@ -103,6 +103,37 @@ function AiAssistantProvider({
     }
   ) });
 }
+
+// src/lib/bookingHref.ts
+function toSiteRelativeHref(href) {
+  try {
+    const u = new URL(href, typeof window !== "undefined" ? window.location.origin : "https://local");
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return href;
+  }
+}
+function hotelDetailsHrefFromTour(tour) {
+  if (tour.link) return toSiteRelativeHref(tour.link);
+  return getTourHref(tour.id);
+}
+function roomBookingHref(room, hotelId) {
+  if (room.booking_url) {
+    let href = toSiteRelativeHref(room.booking_url);
+    try {
+      const u = new URL(href, "https://local");
+      if (room.room_type && !u.searchParams.has("room_type")) {
+        u.searchParams.set("room_type", room.room_type);
+      }
+      u.searchParams.delete("list_price");
+      u.searchParams.delete("room_price");
+      href = `${u.pathname}${u.search}${u.hash}`;
+    } catch {
+    }
+    return href;
+  }
+  return getTourHref(`lt_${hotelId}`, room.room_type);
+}
 function Badge({
   className,
   children
@@ -168,7 +199,7 @@ function TourCard({ tour }) {
       /* @__PURE__ */ jsx(
         "a",
         {
-          href: getTourHref(tour.id),
+          href: hotelDetailsHrefFromTour(tour),
           className: "inline-flex h-9 shrink-0 items-center justify-center rounded-[var(--radius-btn)] bg-coral px-4 text-xs font-semibold text-white shadow-[0_6px_16px_rgb(255_90_60_/_0.3)] transition hover:bg-coral-deep",
           children: "\u041F\u043E\u0434\u0440\u043E\u0431\u043D\u0435\u0435"
         }
@@ -746,6 +777,7 @@ function RoomTypesSection({
     staleTime: 5 * 60 * 1e3
   });
   const rooms = data?.rooms ?? [];
+  const hotelId = Number(data?.hotel_id) || Number(String(tourId).replace(/^lt_/i, "")) || 0;
   useEffect(() => {
     if (roomKey && selectedRef.current) {
       selectedRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -758,56 +790,60 @@ function RoomTypesSection({
     isLoading ? /* @__PURE__ */ jsxs("div", { className: "space-y-2", children: [
       /* @__PURE__ */ jsx(Skeleton, { className: "h-16 w-full" }),
       /* @__PURE__ */ jsx(Skeleton, { className: "h-16 w-full" })
-    ] }) : /* @__PURE__ */ jsx("ul", { className: "space-y-3", children: rooms.map((room) => /* @__PURE__ */ jsx(
-      "li",
-      {
-        ref: room.room_type.toLowerCase() === roomKey ? selectedRef : void 0,
-        className: `rounded-[12px] border p-4 ${room.room_type.toLowerCase() === roomKey ? "border-sea bg-sea-soft ring-1 ring-sea/40" : "border-line bg-paper"}`,
-        children: /* @__PURE__ */ jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
-          /* @__PURE__ */ jsxs("div", { children: [
-            /* @__PURE__ */ jsx("p", { className: "font-medium text-ink", children: room.room_type }),
-            /* @__PURE__ */ jsx("div", { className: "mt-2 flex flex-wrap gap-2", children: Object.entries(room.meals).sort((a, b) => a[1] - b[1]).map(([meal, price]) => /* @__PURE__ */ jsxs(Badge, { className: "text-ink/80", children: [
-              mealLabel(meal),
-              " \xB7 \u043E\u0442 ",
-              formatPrice(price, room.currency)
-            ] }, meal)) }),
-            /* @__PURE__ */ jsxs("p", { className: "mt-2 text-xs text-faint", children: [
-              room.offers_count,
-              " ",
-              room.offers_count === 1 ? "\u043F\u0440\u0435\u0434\u043B\u043E\u0436\u0435\u043D\u0438\u0435" : room.offers_count < 5 ? "\u043F\u0440\u0435\u0434\u043B\u043E\u0436\u0435\u043D\u0438\u044F" : "\u043F\u0440\u0435\u0434\u043B\u043E\u0436\u0435\u043D\u0438\u0439",
-              " ",
-              "\u043E\u0442 \u0442\u0443\u0440\u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440\u043E\u0432"
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxs("div", { className: "text-right", children: [
-            /* @__PURE__ */ jsxs("p", { className: "text-lg font-semibold text-coral", children: [
-              "\u043E\u0442 ",
-              formatPrice(room.min_price, room.currency)
+    ] }) : /* @__PURE__ */ jsx("ul", { className: "space-y-3", children: rooms.map((room) => {
+      const bookingHref = hotelId ? roomBookingHref(
+        {
+          room_type: room.room_type,
+          min_price: room.min_price,
+          currency: room.currency,
+          meals: room.meals,
+          offers_count: room.offers_count,
+          sample_tour_id: room.sample_tour_id,
+          url: room.url,
+          booking_url: room.booking_url
+        },
+        hotelId
+      ) : room.booking_url || room.url || "";
+      return /* @__PURE__ */ jsx(
+        "li",
+        {
+          ref: room.room_type.toLowerCase() === roomKey ? selectedRef : void 0,
+          className: `rounded-[12px] border p-4 ${room.room_type.toLowerCase() === roomKey ? "border-sea bg-sea-soft ring-1 ring-sea/40" : "border-line bg-paper"}`,
+          children: /* @__PURE__ */ jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
+            /* @__PURE__ */ jsxs("div", { children: [
+              /* @__PURE__ */ jsx("p", { className: "font-medium text-ink", children: room.room_type }),
+              /* @__PURE__ */ jsx("div", { className: "mt-2 flex flex-wrap gap-2", children: Object.entries(room.meals).sort((a, b) => a[1] - b[1]).map(([meal, price]) => /* @__PURE__ */ jsxs(Badge, { className: "text-ink/80", children: [
+                mealLabel(meal),
+                " \xB7 \u043E\u0442 ",
+                formatPrice(price, room.currency)
+              ] }, meal)) }),
+              /* @__PURE__ */ jsxs("p", { className: "mt-2 text-xs text-faint", children: [
+                room.offers_count,
+                " ",
+                room.offers_count === 1 ? "\u043F\u0440\u0435\u0434\u043B\u043E\u0436\u0435\u043D\u0438\u0435" : room.offers_count < 5 ? "\u043F\u0440\u0435\u0434\u043B\u043E\u0436\u0435\u043D\u0438\u044F" : "\u043F\u0440\u0435\u0434\u043B\u043E\u0436\u0435\u043D\u0438\u0439",
+                " ",
+                "\u043E\u0442 \u0442\u0443\u0440\u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440\u043E\u0432"
+              ] })
             ] }),
-            room.booking_url ? /* @__PURE__ */ jsx(
-              "a",
-              {
-                href: room.booking_url,
-                target: "_blank",
-                rel: "noreferrer",
-                className: "mt-2 inline-block rounded-lg bg-coral px-3 py-1.5 text-sm font-semibold text-white hover:bg-coral-deep",
-                children: "\u041F\u0435\u0440\u0435\u0439\u0442\u0438 \u043A \u0431\u0440\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u044E"
-              }
-            ) : room.url ? /* @__PURE__ */ jsx(
-              "a",
-              {
-                href: room.url,
-                target: "_blank",
-                rel: "noreferrer",
-                className: "mt-1 inline-block text-sm text-sea hover:underline",
-                children: "\u0421\u043C\u043E\u0442\u0440\u0435\u0442\u044C \u0442\u0443\u0440 \u2192"
-              }
-            ) : null
+            /* @__PURE__ */ jsxs("div", { className: "text-right", children: [
+              /* @__PURE__ */ jsxs("p", { className: "text-lg font-semibold text-coral", children: [
+                "\u043E\u0442 ",
+                formatPrice(room.min_price, room.currency)
+              ] }),
+              bookingHref ? /* @__PURE__ */ jsx(
+                "a",
+                {
+                  href: bookingHref,
+                  className: "mt-2 inline-block rounded-lg bg-coral px-3 py-1.5 text-sm font-semibold text-white hover:bg-coral-deep",
+                  children: "\u041F\u0435\u0440\u0435\u0439\u0442\u0438 \u043A \u0431\u0440\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u044E"
+                }
+              ) : null
+            ] })
           ] })
-        ] })
-      },
-      room.room_type
-    )) })
+        },
+        room.room_type
+      );
+    }) })
   ] });
 }
 function useWebSocket(enabled = true) {
@@ -1190,7 +1226,7 @@ function HotelCard({ tour }) {
       /* @__PURE__ */ jsx(
         "a",
         {
-          href: getTourHref(tour.id),
+          href: hotelDetailsHrefFromTour(tour),
           className: "rounded-lg bg-coral px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-coral-deep",
           children: "\u041F\u0435\u0440\u0435\u0439\u0442\u0438 \u043A \u0431\u0440\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u044E"
         }
@@ -1207,7 +1243,7 @@ function RoomCardView({
   hotelId,
   hotelImage
 }) {
-  const internalHref = getTourHref(`lt_${hotelId}`, room.room_type);
+  const bookingHref = roomBookingHref(room, hotelId);
   const meals = Object.entries(room.meals).sort((a, b) => a[1] - b[1]);
   return /* @__PURE__ */ jsxs("div", { className: "flex gap-2.5 rounded-xl border border-line/60 bg-paper p-2.5", children: [
     hotelImage && /* @__PURE__ */ jsx(
@@ -1231,19 +1267,10 @@ function RoomCardView({
           "\u043E\u0442 ",
           formatPrice(room.min_price, room.currency)
         ] }),
-        room.booking_url ? /* @__PURE__ */ jsx(
+        /* @__PURE__ */ jsx(
           "a",
           {
-            href: room.booking_url,
-            target: "_blank",
-            rel: "noreferrer",
-            className: "rounded-lg bg-coral px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-coral-deep",
-            children: "\u041A \u0431\u0440\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u044E"
-          }
-        ) : /* @__PURE__ */ jsx(
-          "a",
-          {
-            href: internalHref,
+            href: bookingHref,
             className: "rounded-lg bg-coral px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-coral-deep",
             children: "\u041A \u0431\u0440\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u044E"
           }

@@ -1179,7 +1179,11 @@ export async function searchLevelTravelPackages(input: {
   // Point every tour at the company's OWN site instead of the supplier's.
   tours = tours.map((t) => {
     const hid = Number(t.id.replace(/^lt_/, ''))
-    const url = buildTotusHotelUrl({ hotelId: hid, requestId, params: searchParamsForLinks })
+    const url = buildTotusHotelUrl({
+      hotelId: hid,
+      requestId,
+      params: searchParamsForLinks,
+    })
     return url ? { ...t, link: url } : t
   })
   cacheTours(tours)
@@ -1258,7 +1262,9 @@ export function buildBookingUrl(opts: {
         requestId: ctx?.requestId,
         params: ctx?.params,
       })
-      if (url) return opts.room ? `${url}&room=${encodeURIComponent(opts.room)}` : url
+      if (url) {
+        return opts.room ? `${url}&room_type=${encodeURIComponent(opts.room)}` : url
+      }
     }
     return undefined
   }

@@ -1,9 +1,9 @@
 'use client'
 
 import type { ChatMessage as ChatMessageType, RoomCard, Tour } from '@/types'
-import { getTourHref } from '@/config'
 import { mealLabel } from '@/lib/meals'
 import { formatPrice } from '@/lib/utils'
+import { hotelDetailsHrefFromTour, roomBookingHref } from '@/lib/bookingHref'
 import { Badge } from '@/components/ui/badge'
 
 const PICK_LABEL_STYLES: Record<string, string> = {
@@ -162,7 +162,7 @@ function HotelCard({ tour }: { tour: Tour }) {
           <p className="font-semibold text-coral">от {formatPrice(tour.price, tour.currency)}</p>
         </div>
         <a
-          href={getTourHref(tour.id)}
+          href={hotelDetailsHrefFromTour(tour)}
           className="rounded-lg bg-coral px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-coral-deep"
         >
           Перейти к бронированию
@@ -189,7 +189,7 @@ function RoomCardView({
   hotelId: number
   hotelImage?: string
 }) {
-  const internalHref = getTourHref(`lt_${hotelId}`, room.room_type)
+  const bookingHref = roomBookingHref(room, hotelId)
   const meals = Object.entries(room.meals).sort((a, b) => a[1] - b[1])
 
   return (
@@ -215,23 +215,12 @@ function RoomCardView({
           <p className="text-sm font-semibold text-coral">
             от {formatPrice(room.min_price, room.currency)}
           </p>
-          {room.booking_url ? (
-            <a
-              href={room.booking_url}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg bg-coral px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-coral-deep"
-            >
-              К бронированию
-            </a>
-          ) : (
-            <a
-              href={internalHref}
-              className="rounded-lg bg-coral px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-coral-deep"
-            >
-              К бронированию
-            </a>
-          )}
+          <a
+            href={bookingHref}
+            className="rounded-lg bg-coral px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-coral-deep"
+          >
+            К бронированию
+          </a>
         </div>
       </div>
     </div>

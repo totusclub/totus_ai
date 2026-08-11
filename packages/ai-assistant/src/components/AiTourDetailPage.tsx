@@ -13,6 +13,7 @@ import {
 import { getTour, getTourRooms } from '@/lib/api'
 import { mealLabel } from '@/lib/meals'
 import { formatPrice } from '@/lib/utils'
+import { roomBookingHref } from '@/lib/bookingHref'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -252,6 +253,7 @@ function RoomTypesSection({
   })
 
   const rooms = data?.rooms ?? []
+  const hotelId = Number(data?.hotel_id) || Number(String(tourId).replace(/^lt_/i, '')) || 0
 
   useEffect(() => {
     if (roomKey && selectedRef.current) {
@@ -277,7 +279,23 @@ function RoomTypesSection({
         </div>
       ) : (
         <ul className="space-y-3">
-          {rooms.map((room) => (
+          {rooms.map((room) => {
+            const bookingHref = hotelId
+              ? roomBookingHref(
+                  {
+                    room_type: room.room_type,
+                    min_price: room.min_price,
+                    currency: room.currency,
+                    meals: room.meals,
+                    offers_count: room.offers_count,
+                    sample_tour_id: room.sample_tour_id,
+                    url: room.url,
+                    booking_url: room.booking_url,
+                  },
+                  hotelId,
+                )
+              : room.booking_url || room.url || ''
+            return (
             <li
               key={room.room_type}
               ref={room.room_type.toLowerCase() === roomKey ? selectedRef : undefined}
@@ -313,29 +331,19 @@ function RoomTypesSection({
                   <p className="text-lg font-semibold text-coral">
                     от {formatPrice(room.min_price, room.currency)}
                   </p>
-                  {room.booking_url ? (
+                  {bookingHref ? (
                     <a
-                      href={room.booking_url}
-                      target="_blank"
-                      rel="noreferrer"
+                      href={bookingHref}
                       className="mt-2 inline-block rounded-lg bg-coral px-3 py-1.5 text-sm font-semibold text-white hover:bg-coral-deep"
                     >
                       Перейти к бронированию
-                    </a>
-                  ) : room.url ? (
-                    <a
-                      href={room.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block text-sm text-sea hover:underline"
-                    >
-                      Смотреть тур →
                     </a>
                   ) : null}
                 </div>
               </div>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
     </section>

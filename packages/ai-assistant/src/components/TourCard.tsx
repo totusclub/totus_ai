@@ -2,7 +2,7 @@
 
 import { Clock, MapPin } from 'lucide-react'
 import type { Tour } from '@/types'
-import { getTourHref } from '@/config'
+import { hotelDetailsHrefFromTour } from '@/lib/bookingHref'
 import { formatPrice } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 
@@ -65,7 +65,7 @@ export function TourCard({ tour }: { tour: Tour }) {
           {formatPrice(tour.price, tour.currency)}
         </p>
         <a
-          href={getTourHref(tour.id)}
+          href={hotelDetailsHrefFromTour(tour)}
           className="inline-flex h-9 shrink-0 items-center justify-center rounded-[var(--radius-btn)] bg-coral px-4 text-xs font-semibold text-white shadow-[0_6px_16px_rgb(255_90_60_/_0.3)] transition hover:bg-coral-deep"
         >
           Подробнее

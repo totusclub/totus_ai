@@ -214,7 +214,11 @@ app.get('/api/tours/:id/rooms', async (req, res) => {
     })
     const rooms = groupOffersByRoom(offers).map((r) => ({
       ...r,
-      booking_url: buildBookingUrl({ tourId: r.sample_tour_id, hotelId, room: r.room_type }),
+      booking_url: buildBookingUrl({
+        tourId: r.sample_tour_id,
+        hotelId,
+        room: r.room_type,
+      }),
     }))
     res.json({ hotel_id: hotelId, rooms })
   } catch (err) {

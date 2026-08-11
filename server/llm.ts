@@ -245,37 +245,20 @@ export const TOUR_TOOLS: ChatCompletionTool[] = [
   },
 ]
 
-export function isKimiEnabled() {
-  return Boolean(
-    process.env.LLM_API_KEY ||
-      process.env.DEEPSEEK_API_KEY ||
-      process.env.MOONSHOT_API_KEY ||
-      process.env.KIMI_API_KEY,
-  )
+export function isLlmEnabled() {
+  return Boolean(process.env.LLM_API_KEY || process.env.DEEPSEEK_API_KEY)
 }
 
 /**
  * Provider resolution. The project speaks the OpenAI protocol, so switching the
- * model is only env vars. Priority: generic LLM_* → DeepSeek → Kimi/Moonshot.
+ * model is only env vars: LLM_* overrides, otherwise DeepSeek defaults.
  * DeepSeek: base https://api.deepseek.com, model deepseek-v4-flash
  * (legacy aliases deepseek-chat/reasoner are retired after 2026-07-24).
  */
 function resolveProvider() {
-  const apiKey =
-    process.env.LLM_API_KEY ||
-    process.env.DEEPSEEK_API_KEY ||
-    process.env.MOONSHOT_API_KEY ||
-    process.env.KIMI_API_KEY
-  const isDeepseek = Boolean(process.env.DEEPSEEK_API_KEY || process.env.LLM_API_KEY)
-  const baseURL =
-    process.env.LLM_BASE_URL ||
-    process.env.KIMI_BASE_URL ||
-    (isDeepseek ? 'https://api.deepseek.com' : 'https://api.moonshot.ai/v1')
-  const model =
-    process.env.LLM_MODEL ||
-    process.env.KIMI_MODEL ||
-    process.env.MOONSHOT_MODEL ||
-    (isDeepseek ? 'deepseek-v4-flash' : 'moonshot-v1-8k')
+  const apiKey = process.env.LLM_API_KEY || process.env.DEEPSEEK_API_KEY
+  const baseURL = process.env.LLM_BASE_URL || 'https://api.deepseek.com'
+  const model = process.env.LLM_MODEL || 'deepseek-v4-flash'
   const temperature = Number(process.env.LLM_TEMPERATURE ?? 0.35)
   // DeepSeek V4 runs in "thinking" mode by default. For a website chat we do
   // not want chain-of-thought: it burns tokens, adds latency, and — critically —
@@ -296,7 +279,7 @@ function resolveProvider() {
 
 function getClient() {
   const { apiKey, baseURL } = resolveProvider()
-  if (!apiKey) throw new Error('LLM_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY is not set')
+  if (!apiKey) throw new Error('LLM_API_KEY / DEEPSEEK_API_KEY is not set')
 
   return new OpenAI({ apiKey, baseURL })
 }
@@ -523,7 +506,7 @@ async function runTool(
       if (!destination) return { error: 'Нужен destination (страна, курорт или отель)' }
 
       // Guard against the model re-running an identical search within one
-      // message turn. Kimi's tool loop can call search_tours several times; if
+      // message turn. The model's tool loop can call search_tours several times; if
       // the parameters are identical we return the previous result instead of
       // hitting Level.Travel again (that was the cause of the same request_id
       // being searched 8 times in the logs). A genuinely different search
@@ -869,7 +852,7 @@ async function runTool(
   }
 }
 
-export async function handleKimiMessage(
+export async function handleLlmMessage(
   ws: WebSocket,
   session: Session,
   userText: string,
@@ -880,14 +863,14 @@ export async function handleKimiMessage(
   const messageId = randomUUID()
   const systemPrompt = buildTotusSystemPrompt()
 
-  if (!session.kimiMessages) {
-    session.kimiMessages = [{ role: 'system', content: systemPrompt }]
-  } else if (session.kimiMessages[0]?.role === 'system') {
-    session.kimiMessages[0] = { role: 'system', content: systemPrompt }
+  if (!session.llmMessages) {
+    session.llmMessages = [{ role: 'system', content: systemPrompt }]
+  } else if (session.llmMessages[0]?.role === 'system') {
+    session.llmMessages[0] = { role: 'system', content: systemPrompt }
   }
 
   session.history.push({ role: 'user', content: userText })
-  session.kimiMessages.push({ role: 'user', content: userText })
+  session.llmMessages.push({ role: 'user', content: userText })
 
   // Clear the per-turn search dedup cache so a legitimate new search in this
   // message can run; it only blocks identical repeats *within* the same turn.
@@ -906,7 +889,7 @@ export async function handleKimiMessage(
     // the return type ambiguous (streaming vs non-streaming union).
     const requestBody: Record<string, unknown> = {
       model,
-      messages: session.kimiMessages as ChatCompletionMessageParam[],
+      messages: session.llmMessages as ChatCompletionMessageParam[],
       tools: TOUR_TOOLS,
       tool_choice: 'auto',
       temperature: provider.temperature,
@@ -924,7 +907,7 @@ export async function handleKimiMessage(
     if (finishReason === 'tool_calls' && assistantMessage.tool_calls?.length) {
       // Keep every field the provider sent (including DeepSeek's
       // `reasoning_content`) — thinking mode requires it echoed back verbatim.
-      session.kimiMessages.push({ ...assistantMessage } as ChatCompletionMessageParam)
+      session.llmMessages.push({ ...assistantMessage } as ChatCompletionMessageParam)
 
       for (const toolCall of assistantMessage.tool_calls) {
         if (toolCall.type !== 'function') continue
@@ -977,7 +960,7 @@ export async function handleKimiMessage(
           },
           messageId,
         })
-        session.kimiMessages.push({
+        session.llmMessages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
           content: JSON.stringify(result),
@@ -987,7 +970,7 @@ export async function handleKimiMessage(
     }
 
     const content = assistantMessage.content ?? 'Чем ещё могу помочь с подбором?'
-    session.kimiMessages.push({ role: 'assistant', content })
+    session.llmMessages.push({ role: 'assistant', content })
     session.history.push({ role: 'assistant', content })
     logEvent({ session: session.logId ?? 'unknown', kind: 'assistant', text: content })
 
@@ -1007,10 +990,10 @@ export async function handleKimiMessage(
   })
 }
 
-export function kimiStatus() {
+export function llmStatus() {
   const cfg = totusConfig()
   return {
-    enabled: isKimiEnabled(),
+    enabled: isLlmEnabled(),
     model: getModel(),
     baseURL: resolveProvider().baseURL,
     agent: cfg.agentName,

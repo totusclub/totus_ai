@@ -29,7 +29,7 @@ export function ChatWidget({ fullscreenOnOpen = false }: ChatWidgetProps) {
   const deleteChat = useAssistantStore((s) => s.deleteChat)
   const typingStatus = useAssistantStore((s) => s.typingStatus)
   const [draft, setDraft] = useState('')
-  const [kimiOn, setKimiOn] = useState(false)
+  const [llmOn, setLlmOn] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -44,8 +44,10 @@ export function ChatWidget({ fullscreenOnOpen = false }: ChatWidgetProps) {
   useEffect(() => {
     fetch(`${getApiBase()}/health`)
       .then((r) => r.json())
-      .then((data: { kimi?: { enabled?: boolean } }) => setKimiOn(Boolean(data.kimi?.enabled)))
-      .catch(() => setKimiOn(false))
+      .then((data: { llm?: { enabled?: boolean }; kimi?: { enabled?: boolean } }) =>
+        setLlmOn(Boolean(data.llm?.enabled ?? data.kimi?.enabled)),
+      )
+      .catch(() => setLlmOn(false))
   }, [isConnected])
 
   useEffect(() => {
@@ -88,7 +90,7 @@ export function ChatWidget({ fullscreenOnOpen = false }: ChatWidgetProps) {
               {isConnected ? (
                 <>
                   <Wifi className="h-3 w-3 text-ok" />
-                  {kimiOn ? 'Онлайн · подбор туров' : 'Локальный режим'}
+                  {llmOn ? 'Онлайн · подбор туров' : 'Локальный режим'}
                 </>
               ) : (
                 <>

@@ -24,7 +24,7 @@ export interface Session {
   phone?: string
   guestNames?: string[]
   history: Array<{ role: 'user' | 'assistant'; content: string }>
-  kimiMessages?: ChatCompletionMessageParam[]
+  llmMessages?: ChatCompletionMessageParam[]
   /** Active Level.Travel search context for offers / actualize */
   ltRequestId?: string
   ltOkOperators?: string[]
@@ -209,19 +209,19 @@ export async function handleAssistantMessage(
   userText: string,
   deps: AssistantDeps,
 ) {
-  const { isKimiEnabled, handleKimiMessage } = await import('./kimi.js')
-  if (isKimiEnabled()) {
+  const { isLlmEnabled, handleLlmMessage } = await import('./llm.js')
+  if (isLlmEnabled()) {
     try {
-      await handleKimiMessage(ws, session, userText, deps)
+      await handleLlmMessage(ws, session, userText, deps)
       return
     } catch (err) {
       // DO NOT silently fall back to the scripted bot: that hid the real
       // failure and made it look like "the assistant stopped finding tours",
       // while the actual cause (LLM/API error) was only visible in the
       // server log. Surface the error in the chat instead.
-      console.error('[kimi] ОШИБКА ассистента:', err)
+      console.error('[llm] ОШИБКА ассистента:', err)
       if (session.history.at(-1)?.role === 'user') session.history.pop()
-      if (session.kimiMessages?.at(-1)?.role === 'user') session.kimiMessages.pop()
+      if (session.llmMessages?.at(-1)?.role === 'user') session.llmMessages.pop()
 
       const reason = err instanceof Error ? err.message : String(err)
       logEvent({ session: session.logId ?? 'unknown', kind: 'error', text: reason })

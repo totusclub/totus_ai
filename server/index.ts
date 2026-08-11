@@ -6,7 +6,7 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import { randomUUID } from 'crypto'
 import { SCHEMA_TABLES } from './data.js'
 import { handleAssistantMessage, createSession, type Session } from './assistant.js'
-import { kimiStatus } from './kimi.js'
+import { llmStatus } from './llm.js'
 import {
   BUILD_TAG,
   buildBookingUrl,
@@ -96,7 +96,10 @@ app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
     service: 'tour-assistant',
-    kimi: kimiStatus(),
+    llm: llmStatus(),
+    // Legacy alias: ChatWidget builds up to 1.0.10 read `kimi.enabled` for the
+    // online badge. Remove after kedam-WEB reinstalls the package (>= 1.0.11).
+    kimi: llmStatus(),
     levelTravel: levelTravelStatus(),
   })
 })
@@ -360,14 +363,14 @@ wss.on('connection', (ws) => {
 })
 
 server.listen(PORT, () => {
-  const kimi = kimiStatus()
+  const llm = llmStatus()
   const lt = levelTravelStatus()
   console.log(`Тотус клуб API + WS on http://localhost:${PORT}`)
   console.log(`WebSocket: ws://localhost:${PORT}/ws/assistant`)
   console.log(
-    kimi.enabled
-      ? `Kimi: ON · ${kimi.agent} · model=${kimi.model}`
-      : 'Kimi: OFF',
+    llm.enabled
+      ? `LLM: ON · ${llm.agent} · model=${llm.model}`
+      : 'LLM: OFF',
   )
   console.log(
     lt.enabled

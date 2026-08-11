@@ -1313,7 +1313,7 @@ function ChatWidget({ fullscreenOnOpen = false }) {
   const deleteChat = useAssistantStore((s) => s.deleteChat);
   const typingStatus = useAssistantStore((s) => s.typingStatus);
   const [draft, setDraft] = useState("");
-  const [kimiOn, setKimiOn] = useState(false);
+  const [llmOn, setLlmOn] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   useEffect(() => {
@@ -1323,7 +1323,9 @@ function ChatWidget({ fullscreenOnOpen = false }) {
     if (isOpen) inputRef.current?.focus();
   }, [isOpen]);
   useEffect(() => {
-    fetch(`${getApiBase()}/health`).then((r) => r.json()).then((data) => setKimiOn(Boolean(data.kimi?.enabled))).catch(() => setKimiOn(false));
+    fetch(`${getApiBase()}/health`).then((r) => r.json()).then(
+      (data) => setLlmOn(Boolean(data.llm?.enabled ?? data.kimi?.enabled))
+    ).catch(() => setLlmOn(false));
   }, [isConnected]);
   useEffect(() => {
     const handler = (event) => {
@@ -1360,7 +1362,7 @@ function ChatWidget({ fullscreenOnOpen = false }) {
               /* @__PURE__ */ jsx("p", { className: "font-[family-name:var(--font-display)] text-[13px] font-semibold tracking-tight text-ink", children: "\u041C\u0438\u043B\u0430 \xB7 \u0422\u043E\u0442\u0443\u0441 \u043A\u043B\u0443\u0431" }),
               /* @__PURE__ */ jsx("p", { className: "mt-0.5 flex items-center gap-1.5 text-xs text-subtle", children: isConnected ? /* @__PURE__ */ jsxs(Fragment, { children: [
                 /* @__PURE__ */ jsx(Wifi, { className: "h-3 w-3 text-ok" }),
-                kimiOn ? "\u041E\u043D\u043B\u0430\u0439\u043D \xB7 \u043F\u043E\u0434\u0431\u043E\u0440 \u0442\u0443\u0440\u043E\u0432" : "\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C"
+                llmOn ? "\u041E\u043D\u043B\u0430\u0439\u043D \xB7 \u043F\u043E\u0434\u0431\u043E\u0440 \u0442\u0443\u0440\u043E\u0432" : "\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C"
               ] }) : /* @__PURE__ */ jsxs(Fragment, { children: [
                 /* @__PURE__ */ jsx(WifiOff, { className: "h-3 w-3 text-gold" }),
                 " \u041F\u0435\u0440\u0435\u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435\u2026"

@@ -2,6 +2,8 @@
 
 Embeddable Totus AI (Мила) React UI.
 
+Как работает система целиком (на русском): **[../../docs/KAK-RABOTAET-AI.md](../../docs/KAK-RABOTAET-AI.md)**
+
 ## Install from GitHub (recommended)
 
 Package is published to branch `pkg/ai-assistant` of this same repo.

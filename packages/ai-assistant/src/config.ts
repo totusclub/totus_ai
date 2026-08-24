@@ -7,6 +7,13 @@ export type AiAssistantConfig = {
   tourBasePath: string
   /** Home link for «Все туры», default / */
   homePath: string
+  /**
+   * JWT access token (same as site login).
+   * When present, chat history is stored in MySQL via API (not localStorage).
+   */
+  getAccessToken?: () => string | null | Promise<string | null>
+  /** auto (default) | remote | local */
+  historyMode?: 'auto' | 'remote' | 'local'
 }
 
 const envApi =

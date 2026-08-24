@@ -1,0 +1,300 @@
+import { useCallback, useEffect, useRef } from 'react'
+import { getWsUrl } from '@/config'
+import { useAssistantStore } from '@/stores/assistantStore'
+import type { WsServerMessage } from '@/types'
+import { uid } from '@/lib/utils'
+
+export function useWebSocket(enabled = true) {
+  const wsRef = useRef<WebSocket | null>(null)
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const manualCloseRef = useRef(false)
+
+  const hydrated = useAssistantStore((s) => s.hydrated)
+  const setConnected = useAssistantStore((s) => s.setConnected)
+  const setTyping = useAssistantStore((s) => s.setTyping)
+  const addMessage = useAssistantStore((s) => s.addMessage)
+  const appendToMessage = useAssistantStore((s) => s.appendToMessage)
+  const updateMessage = useAssistantStore((s) => s.updateMessage)
+  const setStreamingId = useAssistantStore((s) => s.setStreamingId)
+  const setHighlightedTours = useAssistantStore((s) => s.setHighlightedTours)
+  const setTypingStatus = useAssistantStore((s) => s.setTypingStatus)
+
+  const handleMessageRef = useRef<(raw: { data: unknown }) => void>(() => {})
+
+  handleMessageRef.current = (raw: { data: unknown }) => {
+    let data: WsServerMessage
+    try {
+      data = JSON.parse(String(raw.data)) as WsServerMessage
+    } catch {
+      return
+    }
+
+    switch (data.type) {
+      case 'typing':
+        setTyping(true)
+        break
+      case 'token': {
+        if (!data.content) break
+        setTyping(false)
+        const store = useAssistantStore.getState()
+        let id = store.streamingId
+        if (!id) {
+          id = data.messageId ?? uid('assistant')
+          addMessage({ id, role: 'assistant', content: '' })
+          setStreamingId(id)
+        }
+        appendToMessage(id, data.content)
+        break
+      }
+      case 'tours':
+        if (data.tours?.length) {
+          setHighlightedTours(data.tours)
+          const store = useAssistantStore.getState()
+          const id = store.streamingId
+          if (!id) {
+            const newId = data.messageId ?? uid('assistant')
+            addMessage({
+              id: newId,
+              role: 'assistant',
+              content: '',
+              metadata: { tour_results: data.tours },
+            })
+            setStreamingId(newId)
+          } else {
+            updateMessage(id, {
+              metadata: {
+                ...store.messages.find((m) => m.id === id)?.metadata,
+                tour_results: data.tours,
+              },
+            })
+          }
+        }
+        break
+      case 'rooms':
+        if (data.rooms?.length && data.hotel) {
+          const store = useAssistantStore.getState()
+          const id = store.streamingId
+          const payload = { hotel: data.hotel, rooms: data.rooms }
+          if (!id) {
+            const newId = data.messageId ?? uid('assistant')
+            addMessage({
+              id: newId,
+              role: 'assistant',
+              content: '',
+              metadata: { room_cards: payload },
+            })
+            setStreamingId(newId)
+          } else {
+            updateMessage(id, {
+              metadata: {
+                ...store.messages.find((m) => m.id === id)?.metadata,
+                room_cards: payload,
+              },
+            })
+          }
+        }
+        break
+      case 'destinations':
+        if (data.destinations?.length) {
+          const store = useAssistantStore.getState()
+          const id = store.streamingId
+          if (!id) {
+            const newId = data.messageId ?? uid('assistant')
+            addMessage({
+              id: newId,
+              role: 'assistant',
+              content: '',
+              metadata: { destination_cards: data.destinations },
+            })
+            setStreamingId(newId)
+          } else {
+            updateMessage(id, {
+              metadata: {
+                ...store.messages.find((m) => m.id === id)?.metadata,
+                destination_cards: data.destinations,
+              },
+            })
+          }
+        }
+        break
+      case 'booking':
+        if (data.booking) {
+          const store = useAssistantStore.getState()
+          const id = store.streamingId
+          if (!id) {
+            const newId = data.messageId ?? uid('assistant')
+            addMessage({
+              id: newId,
+              role: 'assistant',
+              content: '',
+              metadata: { booking: data.booking },
+            })
+            setStreamingId(newId)
+          } else {
+            updateMessage(id, {
+              metadata: {
+                ...store.messages.find((m) => m.id === id)?.metadata,
+                booking: data.booking,
+              },
+            })
+          }
+        }
+        break
+      case 'tool': {
+        if (!data.tool) break
+        if (data.tool.status === 'running') {
+          setTyping(true)
+          setTypingStatus(friendlyStatus(data.tool.name))
+        }
+        const store = useAssistantStore.getState()
+        const id = store.streamingId
+        if (id) {
+          const msg = store.messages.find((m) => m.id === id)
+          const calls = [...(msg?.metadata?.tool_calls ?? [])]
+          const idx = calls.findIndex((c) => c.id && c.id === data.tool!.id)
+          if (idx >= 0) calls[idx] = { ...calls[idx], ...data.tool }
+          else calls.push(data.tool)
+          updateMessage(id, { metadata: { ...msg?.metadata, tool_calls: calls } })
+        }
+        break
+      }
+      case 'done':
+        setTyping(false)
+        setStreamingId(null)
+        break
+      case 'error':
+        setTyping(false)
+        setStreamingId(null)
+        addMessage({
+          role: 'assistant',
+          content: data.error ?? 'Произошла ошибка. Попробуйте ещё раз.',
+        })
+        break
+    }
+  }
+
+  const clearInFlight = useCallback(() => {
+    setTyping(false)
+    setStreamingId(null)
+  }, [setStreamingId, setTyping])
+
+  const connect = useCallback(() => {
+    if (!enabled || !hydrated) return
+    const existing = wsRef.current
+    if (
+      existing &&
+      (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)
+    ) {
+      return
+    }
+
+    const ws = new WebSocket(getWsUrl())
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      setConnected(true)
+      const payload = buildRestorePayload()
+      if (payload.messages.length) ws.send(JSON.stringify(payload))
+    }
+    ws.onclose = () => {
+      setConnected(false)
+      clearInFlight()
+      if (!manualCloseRef.current) {
+        reconnectRef.current = setTimeout(connect, 2000)
+      }
+    }
+    ws.onerror = () => ws.close()
+    ws.onmessage = (event) => handleMessageRef.current(event)
+  }, [clearInFlight, enabled, hydrated, setConnected])
+
+  useEffect(() => {
+    if (!enabled || !hydrated) return
+    manualCloseRef.current = false
+    connect()
+    return () => {
+      manualCloseRef.current = true
+      if (reconnectRef.current) clearTimeout(reconnectRef.current)
+      wsRef.current?.close()
+      wsRef.current = null
+      clearInFlight()
+      setConnected(false)
+    }
+  }, [clearInFlight, connect, enabled, hydrated, setConnected])
+
+  const send = useCallback(
+    (content: string) => {
+      if (!content.trim()) return
+      addMessage({ role: 'user', content: content.trim() })
+      setTyping(true)
+      const payload = JSON.stringify({ type: 'chat', content: content.trim() })
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(payload)
+      } else {
+        setTyping(false)
+        addMessage({
+          role: 'assistant',
+          content: 'Нет соединения с ассистентом. Проверьте интернет и попробуйте ещё раз.',
+        })
+      }
+    },
+    [addMessage, setTyping],
+  )
+
+  const reset = useCallback(() => {
+    useAssistantStore.getState().clearMessages()
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'reset' }))
+    }
+  }, [])
+
+  const newChat = useCallback(() => {
+    useAssistantStore.getState().startNewChat()
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'reset' }))
+    }
+  }, [])
+
+  const openChat = useCallback((id: string) => {
+    useAssistantStore.getState().switchChat(id)
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return
+    wsRef.current.send(JSON.stringify(buildRestorePayload()))
+  }, [])
+
+  const streamingId = useAssistantStore((s) => s.streamingId)
+
+  return { send, reset, newChat, openChat, streamingId }
+}
+
+function buildRestorePayload() {
+  const messages = useAssistantStore.getState().messages
+  const history = messages
+    .filter((m) => m.content.trim() && m.id !== 'welcome' && !m.id.startsWith('welcome'))
+    .map((m) => ({ role: m.role, content: m.content }))
+  const hotels: Array<{ id?: string; name: string }> = []
+  for (const m of messages) {
+    for (const t of m.metadata?.tour_results ?? []) {
+      if (!t?.name) continue
+      const idx = hotels.findIndex((h) => h.name === t.name)
+      if (idx !== -1) hotels.splice(idx, 1)
+      hotels.push({ id: t.id, name: t.name })
+    }
+  }
+  return { type: 'restore', messages: history.slice(-40), hotels: hotels.slice(-8) }
+}
+
+function friendlyStatus(toolName?: string): string {
+  switch (toolName) {
+    case 'search_tours':
+      return 'Подбираю туры'
+    case 'get_hotel_info':
+      return 'Изучаю отель'
+    case 'get_hotel_offers':
+      return 'Ищу варианты размещения'
+    case 'annotate_hotels':
+      return 'Добавляю комментарии'
+    case 'show_destinations':
+      return 'Собираю направления'
+    default:
+      return 'Думаю'
+  }
+}

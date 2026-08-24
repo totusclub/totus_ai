@@ -2,6 +2,11 @@
 
 AI tour assistant — **frontend + API** in one repo.
 
+Подробно на русском, как всё работает: **[docs/KAK-RABOTAET-AI.md](./docs/KAK-RABOTAET-AI.md)**  
+Как работает LLM (модель, промпт, tools): **[docs/KAK-RABOTAET-LLM.md](./docs/KAK-RABOTAET-LLM.md)**  
+История чатов в MySQL: **[docs/KAK-ISTORIYA-MYSQL.md](./docs/KAK-ISTORIYA-MYSQL.md)**  
+Как обновлять пакеты: **[docs/KAK-OBNOVIT-AI.md](./docs/KAK-OBNOVIT-AI.md)**
+
 | Service | Local port | Production host |
 |---------|------------|-----------------|
 | API + WebSocket | `3011` | `https://apiv2.totus.club` |

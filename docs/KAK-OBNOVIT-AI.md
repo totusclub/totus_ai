@@ -1,5 +1,10 @@
 # Как менять AI и пушить (пошагово)
 
+Документация для обновления UI-пакетов и интеграции.
+
+> **Как устроена система целиком** (диалог, WebSocket, поиск, веб vs приложение):  
+> см. **[KAK-RABOTAET-AI.md](./KAK-RABOTAET-AI.md)**.
+
 Документация для обновления UI-пакета `@tosmedia/ai-assistant` и интеграции в `kedam-WEB`.
 
 ## Два репозитория
@@ -256,4 +261,39 @@ npm install github:tosmedia/totus_ai_v2#pkg/ai-assistant --legacy-peer-deps
 git add package.json package-lock.json
 git commit -m "Bump @tosmedia/ai-assistant"
 git push origin main
+```
+
+---
+
+## React Native пакет
+
+Пакет: `@tosmedia/ai-assistant-native`  
+Код: `packages/ai-assistant-native/`  
+Ветка установки: `pkg/ai-assistant-native`  
+Тот же API/WS (`apiv2.totus.club`).
+
+### Публикация
+
+```bash
+cd packages/ai-assistant-native && npm version patch --no-git-tag-version && cd ../..
+npm run publish:assistant-native:git
+```
+
+### Установка в RN-проекте
+
+```bash
+npm install github:tosmedia/totus_ai_v2#pkg/ai-assistant-native
+npm install @react-native-async-storage/async-storage
+```
+
+```tsx
+import { AiAssistantNativeProvider, ChatWidget } from '@tosmedia/ai-assistant-native'
+
+<AiAssistantNativeProvider
+  apiBase="https://apiv2.totus.club/api"
+  wsUrl="wss://apiv2.totus.club/ws/assistant"
+  siteOrigin="https://totus.club"
+>
+  <ChatWidget />
+</AiAssistantNativeProvider>
 ```

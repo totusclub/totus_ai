@@ -26,6 +26,9 @@ import {
   supportedCountries,
 } from './levelTravel.js'
 import { logDir, readRecentLog, readSessions } from './chatLog.js'
+import { requireAuth } from './authUser.js'
+import { dbStatus, ensureChatSchema, isDbConfigured } from './db.js'
+import { registerChatHistoryRoutes } from './chatHistory.js'
 import type { BookingRequest, SearchFilters, Tour } from './types.js'
 
 const PORT = Number(process.env.PORT ?? 3011)
@@ -58,7 +61,9 @@ app.use(
     credentials: true,
   }),
 )
-app.use(express.json())
+app.use(express.json({ limit: '2mb' }))
+
+registerChatHistoryRoutes(app, requireAuth)
 
 async function searchTours(query: Partial<SearchFilters>): Promise<Tour[]> {
   if (!isLevelTravelEnabled()) {
@@ -97,6 +102,7 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     service: 'tour-assistant',
     llm: llmStatus(),
+    db: dbStatus(),
     // Legacy alias: ChatWidget builds up to 1.0.10 read `kimi.enabled` for the
     // online badge. Remove after kedam-WEB reinstalls the package (>= 1.0.11).
     kimi: llmStatus(),
@@ -364,6 +370,7 @@ wss.on('connection', (ws) => {
 server.listen(PORT, () => {
   const llm = llmStatus()
   const lt = levelTravelStatus()
+  const db = dbStatus()
   console.log(`Тотус клуб API + WS on http://localhost:${PORT}`)
   console.log(`WebSocket: ws://localhost:${PORT}/ws/assistant`)
   console.log(
@@ -376,8 +383,18 @@ server.listen(PORT, () => {
       ? `Level.Travel: ON · v${lt.version} · ${lt.baseURL} (real data only) · ${BUILD_TAG}`
       : 'Level.Travel: OFF — set LEVEL_TRAVEL_API_KEY',
   )
+  console.log(
+    db.configured
+      ? `MySQL chats: ON · ${db.host}/${db.database}`
+      : 'MySQL chats: OFF — set DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET',
+  )
   // Pull the canonical departure-city spellings from Level.Travel so the API
   // names never have to be guessed (background, non-blocking).
   void loadDepartures()
   void loadCountries()
+  if (isDbConfigured()) {
+    void ensureChatSchema().catch((e) =>
+      console.error('[MySQL] schema init failed', e),
+    )
+  }
 })

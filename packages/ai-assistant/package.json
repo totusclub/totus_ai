@@ -1,7 +1,7 @@
 {
   "name": "@tosmedia/ai-assistant",
-  "version": "1.0.15",
-  "description": "Totus AI assistant UI (Мила) — embeddable React components",
+  "version": "1.0.16",
+  "description": "Totus AI assistant UI (\u041c\u0438\u043b\u0430) \u2014 embeddable React components",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -9,9 +9,17 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": {
+      "default": "./dist/styles.css",
+      "import": "./dist/styles.css",
+      "require": "./dist/styles.css",
+      "style": "./dist/styles.css"
+    },
+    "./dist/styles.css": "./dist/styles.css"
   },
   "files": [
     "dist"

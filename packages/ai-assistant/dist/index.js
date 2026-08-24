@@ -1,53 +1,15 @@
+import { getAiConfig, getWsUrl, getApiBase, configureAiAssistant, getTourHref } from './chunk-QQ4MQU5H.js';
+export { configureAiAssistant, getAiConfig, getApiBase, getTourHref, getWsUrl } from './chunk-QQ4MQU5H.js';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import * as React from 'react';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { create } from 'zustand';
 import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
 import { MapPin, Clock, Map, Database, X, KeyRound, Link2, Sparkles, MessageCircle, ArrowLeft, Check, Calendar, Users, Wifi, WifiOff, MessagesSquare, Plus, Trash2, Send } from 'lucide-react';
 import { cva } from 'class-variance-authority';
-import { create } from 'zustand';
 
-// src/config.ts
-var envApi = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_API_URL : void 0;
-var envWs = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_WS_URL : void 0;
-var config = {
-  apiBase: envApi || "/api",
-  wsUrl: envWs,
-  tourBasePath: "/tours",
-  homePath: "/"
-};
-function configureAiAssistant(partial) {
-  config = {
-    ...config,
-    ...partial,
-    tourBasePath: partial.tourBasePath ?? config.tourBasePath,
-    homePath: partial.homePath ?? config.homePath
-  };
-}
-function getAiConfig() {
-  return config;
-}
-function getApiBase() {
-  return config.apiBase;
-}
-function getTourHref(tourId, room) {
-  const base = `${config.tourBasePath.replace(/\/$/, "")}/${tourId}`;
-  if (!room) return base;
-  return `${base}?room=${encodeURIComponent(room)}`;
-}
-function getWsUrl() {
-  if (config.wsUrl) return config.wsUrl;
-  if (typeof window === "undefined") {
-    return "ws://localhost:3011/ws/assistant";
-  }
-  const { protocol, hostname, host } = window.location;
-  const wsProto = protocol === "https:" ? "wss" : "ws";
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return `${wsProto}://localhost:3011/ws/assistant`;
-  }
-  return `${wsProto}://${host}/ws/assistant`;
-}
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
@@ -77,12 +39,200 @@ function formatDurationLabel(duration, durationHours) {
 function uid(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
+var welcome = {
+  id: "welcome",
+  role: "assistant",
+  content: "\u0417\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435! \u042F \u041C\u0438\u043B\u0430, \u043F\u043E\u043C\u043E\u0449\u043D\u0438\u043A \xAB\u0422\u043E\u0442\u0443\u0441 \u043A\u043B\u0443\u0431\u0430\xBB \u2600\uFE0F \u041C\u043E\u0433\u0443 \u043E\u0442\u0432\u0435\u0442\u0438\u0442\u044C \u043D\u0430 \u0432\u043E\u043F\u0440\u043E\u0441\u044B \u043F\u0440\u043E \u043E\u0442\u0434\u044B\u0445 \u0438 \u043F\u043E\u0434\u043E\u0431\u0440\u0430\u0442\u044C \u0442\u0443\u0440 \u0441\u043E \u0441\u0441\u044B\u043B\u043A\u043E\u0439. \u0421\u043F\u0440\u043E\u0441\u0438\u0442\u0435 \u0447\u0442\u043E \u0443\u0433\u043E\u0434\u043D\u043E \u2014 \u0438\u043B\u0438 \u0441\u043A\u0430\u0436\u0438\u0442\u0435, \u043A\u0443\u0434\u0430 \u0445\u043E\u0442\u0438\u0442\u0435 \u043F\u043E\u0435\u0445\u0430\u0442\u044C.",
+  timestamp: /* @__PURE__ */ new Date()
+};
+var STORAGE_KEY = "totus-chats-v1";
+function reviveMessages(messages) {
+  return messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp ?? Date.now()) }));
+}
+function loadChats() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.chats) && parsed.chats.length) {
+        const chats = parsed.chats.slice(-30).map((c) => ({ ...c, messages: reviveMessages(c.messages ?? []) }));
+        const activeId = chats.some((c) => c.id === parsed.activeId) ? parsed.activeId : chats[chats.length - 1].id;
+        return { chats, activeId };
+      }
+    }
+  } catch {
+  }
+  const fresh = newChat();
+  return { chats: [fresh], activeId: fresh.id };
+}
+function newChat() {
+  return {
+    id: uid("chat"),
+    title: "\u041D\u043E\u0432\u044B\u0439 \u0447\u0430\u0442",
+    updatedAt: Date.now(),
+    messages: [{ ...welcome, id: uid("welcome"), timestamp: /* @__PURE__ */ new Date() }]
+  };
+}
+var saveTimer = null;
+function saveChats(chats, activeId) {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    void (async () => {
+      try {
+        const { isRemoteHistoryEnabled, upsertRemoteChat, setRemoteActiveChat } = await import('./historyApi-EZHRJEZW.js');
+        if (await isRemoteHistoryEnabled()) {
+          const active = chats.find((c) => c.id === activeId) ?? chats[chats.length - 1];
+          if (active) {
+            await upsertRemoteChat(active);
+            await setRemoteActiveChat(active.id);
+          }
+          return;
+        }
+      } catch {
+      }
+      try {
+        const trimmed = chats.slice(-30).map((c) => ({ ...c, messages: c.messages.slice(-60) }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ chats: trimmed, activeId }));
+      } catch {
+      }
+    })();
+  }, 700);
+}
+function titleFrom(messages) {
+  const firstUser = messages.find((m) => m.role === "user");
+  if (!firstUser) return "\u041D\u043E\u0432\u044B\u0439 \u0447\u0430\u0442";
+  const t = firstUser.content.trim().replace(/\s+/g, " ");
+  return t.length > 42 ? `${t.slice(0, 42)}\u2026` : t;
+}
+var initial = loadChats();
+var useAssistantStore = create((set, get) => ({
+  isOpen: false,
+  isConnected: false,
+  isTyping: false,
+  typingStatus: null,
+  messages: initial.chats.find((c) => c.id === initial.activeId)?.messages ?? [],
+  chats: initial.chats,
+  activeChatId: initial.activeId,
+  showChatList: false,
+  streamingId: null,
+  highlightedTours: [],
+  showSchema: false,
+  hydrated: false,
+  toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
+  setOpen: (open) => set({ isOpen: open }),
+  setConnected: (connected) => set({ isConnected: connected }),
+  setTyping: (typing) => set({ isTyping: typing, ...typing ? {} : { typingStatus: null } }),
+  setTypingStatus: (status) => set({ typingStatus: status }),
+  setShowSchema: (show) => set({ showSchema: show }),
+  hydrateFromRemote: (payload) => {
+    if (!payload || !payload.chats.length) {
+      set({ hydrated: true });
+      return;
+    }
+    const active = payload.chats.find((c) => c.id === payload.activeId) ?? payload.chats[0];
+    set({
+      chats: payload.chats,
+      activeChatId: active.id,
+      messages: active.messages,
+      hydrated: true,
+      streamingId: null,
+      isTyping: false,
+      typingStatus: null
+    });
+  },
+  addMessage: (message) => {
+    const id = message.id ?? uid("msg");
+    set((s) => ({
+      messages: [
+        ...s.messages,
+        {
+          ...message,
+          id,
+          timestamp: /* @__PURE__ */ new Date()
+        }
+      ]
+    }));
+    return id;
+  },
+  appendToMessage: (id, chunk) => set((s) => ({
+    messages: s.messages.map(
+      (m) => m.id === id ? { ...m, content: m.content + chunk } : m
+    )
+  })),
+  updateMessage: (id, patch) => set((s) => ({
+    messages: s.messages.map((m) => m.id === id ? { ...m, ...patch } : m)
+  })),
+  setStreamingId: (id) => set({ streamingId: id }),
+  setHighlightedTours: (tours) => set({ highlightedTours: tours }),
+  clearMessages: () => set((s) => {
+    const fresh = [{ ...welcome, id: uid("welcome"), timestamp: /* @__PURE__ */ new Date() }];
+    const chats = s.chats.map(
+      (c) => c.id === s.activeChatId ? { ...c, messages: fresh, title: "\u041D\u043E\u0432\u044B\u0439 \u0447\u0430\u0442", updatedAt: Date.now() } : c
+    );
+    return { messages: fresh, chats };
+  }),
+  setShowChatList: (show) => set({ showChatList: show }),
+  startNewChat: () => set((s) => {
+    const chat = newChat();
+    return {
+      chats: [...s.chats, chat],
+      activeChatId: chat.id,
+      messages: chat.messages,
+      highlightedTours: [],
+      showChatList: false
+    };
+  }),
+  switchChat: (id) => {
+    const chat = get().chats.find((c) => c.id === id);
+    if (!chat) return [];
+    set({
+      activeChatId: id,
+      messages: chat.messages,
+      highlightedTours: [],
+      showChatList: false,
+      streamingId: null
+    });
+    return chat.messages;
+  },
+  deleteChat: (id) => {
+    void import('./historyApi-EZHRJEZW.js').then(({ deleteRemoteChat }) => deleteRemoteChat(id));
+    set((s) => {
+      const rest = s.chats.filter((c) => c.id !== id);
+      if (!rest.length) {
+        const chat = newChat();
+        return { chats: [chat], activeChatId: chat.id, messages: chat.messages };
+      }
+      if (s.activeChatId !== id) return { chats: rest };
+      const last = rest[rest.length - 1];
+      return { chats: rest, activeChatId: last.id, messages: last.messages };
+    });
+  }
+}));
+useAssistantStore.subscribe((state, prev) => {
+  if (state.messages === prev.messages && state.chats === prev.chats) return;
+  if (state.messages !== prev.messages) {
+    const chats = state.chats.map(
+      (c) => c.id === state.activeChatId ? {
+        ...c,
+        messages: state.messages,
+        title: c.title === "\u041D\u043E\u0432\u044B\u0439 \u0447\u0430\u0442" ? titleFrom(state.messages) : c.title,
+        updatedAt: Date.now()
+      } : c
+    );
+    useAssistantStore.setState({ chats }, false);
+    saveChats(chats, state.activeChatId);
+    return;
+  }
+  saveChats(state.chats, state.activeChatId);
+});
 function applyConfig(props) {
   const next = {};
   if (props.apiBase !== void 0) next.apiBase = props.apiBase;
   if (props.wsUrl !== void 0) next.wsUrl = props.wsUrl;
   if (props.tourBasePath !== void 0) next.tourBasePath = props.tourBasePath;
   if (props.homePath !== void 0) next.homePath = props.homePath;
+  if (props.getAccessToken !== void 0) next.getAccessToken = props.getAccessToken;
+  if (props.historyMode !== void 0) next.historyMode = props.historyMode;
   if (Object.keys(next).length) configureAiAssistant(next);
 }
 function AiAssistantProvider({
@@ -91,9 +241,11 @@ function AiAssistantProvider({
   wsUrl,
   tourBasePath,
   homePath,
+  getAccessToken,
+  historyMode,
   shell = "page"
 }) {
-  applyConfig({ apiBase, wsUrl, tourBasePath, homePath });
+  applyConfig({ apiBase, wsUrl, tourBasePath, homePath, getAccessToken, historyMode });
   const [queryClient] = useState(
     () => new QueryClient({
       defaultOptions: {
@@ -104,9 +256,31 @@ function AiAssistantProvider({
       }
     })
   );
+  const hydrateFromRemote = useAssistantStore((s) => s.hydrateFromRemote);
   useEffect(() => {
-    applyConfig({ apiBase, wsUrl, tourBasePath, homePath });
-  }, [apiBase, wsUrl, tourBasePath, homePath]);
+    applyConfig({ apiBase, wsUrl, tourBasePath, homePath, getAccessToken, historyMode });
+  }, [apiBase, wsUrl, tourBasePath, homePath, getAccessToken, historyMode]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { isRemoteHistoryEnabled, fetchRemoteChats } = await import('./historyApi-EZHRJEZW.js');
+        if (!await isRemoteHistoryEnabled()) {
+          hydrateFromRemote(null);
+          return;
+        }
+        const remote = await fetchRemoteChats();
+        if (cancelled) return;
+        hydrateFromRemote(remote);
+      } catch (e) {
+        console.warn("[ai-history] remote hydrate failed", e);
+        if (!cancelled) hydrateFromRemote(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrateFromRemote, getAccessToken, historyMode]);
   return /* @__PURE__ */ jsx(QueryClientProvider, { client: queryClient, children: /* @__PURE__ */ jsx(
     "div",
     {
@@ -391,154 +565,6 @@ function SchemaVisualizer({
     ] })
   ] }) });
 }
-var welcome = {
-  id: "welcome",
-  role: "assistant",
-  content: "\u0417\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435! \u042F \u041C\u0438\u043B\u0430, \u043F\u043E\u043C\u043E\u0449\u043D\u0438\u043A \xAB\u0422\u043E\u0442\u0443\u0441 \u043A\u043B\u0443\u0431\u0430\xBB \u2600\uFE0F \u041C\u043E\u0433\u0443 \u043E\u0442\u0432\u0435\u0442\u0438\u0442\u044C \u043D\u0430 \u0432\u043E\u043F\u0440\u043E\u0441\u044B \u043F\u0440\u043E \u043E\u0442\u0434\u044B\u0445 \u0438 \u043F\u043E\u0434\u043E\u0431\u0440\u0430\u0442\u044C \u0442\u0443\u0440 \u0441\u043E \u0441\u0441\u044B\u043B\u043A\u043E\u0439. \u0421\u043F\u0440\u043E\u0441\u0438\u0442\u0435 \u0447\u0442\u043E \u0443\u0433\u043E\u0434\u043D\u043E \u2014 \u0438\u043B\u0438 \u0441\u043A\u0430\u0436\u0438\u0442\u0435, \u043A\u0443\u0434\u0430 \u0445\u043E\u0442\u0438\u0442\u0435 \u043F\u043E\u0435\u0445\u0430\u0442\u044C.",
-  timestamp: /* @__PURE__ */ new Date()
-};
-var STORAGE_KEY = "totus-chats-v1";
-function reviveMessages(messages) {
-  return messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp ?? Date.now()) }));
-}
-function loadChats() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed?.chats) && parsed.chats.length) {
-        const chats = parsed.chats.slice(-30).map((c) => ({ ...c, messages: reviveMessages(c.messages ?? []) }));
-        const activeId = chats.some((c) => c.id === parsed.activeId) ? parsed.activeId : chats[chats.length - 1].id;
-        return { chats, activeId };
-      }
-    }
-  } catch {
-  }
-  const fresh = newChat();
-  return { chats: [fresh], activeId: fresh.id };
-}
-function newChat() {
-  return {
-    id: uid("chat"),
-    title: "\u041D\u043E\u0432\u044B\u0439 \u0447\u0430\u0442",
-    updatedAt: Date.now(),
-    messages: [{ ...welcome, id: uid("welcome"), timestamp: /* @__PURE__ */ new Date() }]
-  };
-}
-function saveChats(chats, activeId) {
-  try {
-    const trimmed = chats.slice(-30).map((c) => ({ ...c, messages: c.messages.slice(-60) }));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ chats: trimmed, activeId }));
-  } catch {
-  }
-}
-function titleFrom(messages) {
-  const firstUser = messages.find((m) => m.role === "user");
-  if (!firstUser) return "\u041D\u043E\u0432\u044B\u0439 \u0447\u0430\u0442";
-  const t = firstUser.content.trim().replace(/\s+/g, " ");
-  return t.length > 42 ? `${t.slice(0, 42)}\u2026` : t;
-}
-var initial = loadChats();
-var useAssistantStore = create((set, get) => ({
-  isOpen: false,
-  isConnected: false,
-  isTyping: false,
-  typingStatus: null,
-  messages: initial.chats.find((c) => c.id === initial.activeId)?.messages ?? [],
-  chats: initial.chats,
-  activeChatId: initial.activeId,
-  showChatList: false,
-  streamingId: null,
-  highlightedTours: [],
-  showSchema: false,
-  toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
-  setOpen: (open) => set({ isOpen: open }),
-  setConnected: (connected) => set({ isConnected: connected }),
-  setTyping: (typing) => set({ isTyping: typing, ...typing ? {} : { typingStatus: null } }),
-  setTypingStatus: (status) => set({ typingStatus: status }),
-  setShowSchema: (show) => set({ showSchema: show }),
-  addMessage: (message) => {
-    const id = message.id ?? uid("msg");
-    set((s) => ({
-      messages: [
-        ...s.messages,
-        {
-          ...message,
-          id,
-          timestamp: /* @__PURE__ */ new Date()
-        }
-      ]
-    }));
-    return id;
-  },
-  appendToMessage: (id, chunk) => set((s) => ({
-    messages: s.messages.map(
-      (m) => m.id === id ? { ...m, content: m.content + chunk } : m
-    )
-  })),
-  updateMessage: (id, patch) => set((s) => ({
-    messages: s.messages.map((m) => m.id === id ? { ...m, ...patch } : m)
-  })),
-  setStreamingId: (id) => set({ streamingId: id }),
-  setHighlightedTours: (tours) => set({ highlightedTours: tours }),
-  clearMessages: () => set((s) => {
-    const fresh = [{ ...welcome, id: uid("welcome"), timestamp: /* @__PURE__ */ new Date() }];
-    const chats = s.chats.map(
-      (c) => c.id === s.activeChatId ? { ...c, messages: fresh, title: "\u041D\u043E\u0432\u044B\u0439 \u0447\u0430\u0442", updatedAt: Date.now() } : c
-    );
-    return { messages: fresh, chats };
-  }),
-  setShowChatList: (show) => set({ showChatList: show }),
-  startNewChat: () => set((s) => {
-    const chat = newChat();
-    return {
-      chats: [...s.chats, chat],
-      activeChatId: chat.id,
-      messages: chat.messages,
-      highlightedTours: [],
-      showChatList: false
-    };
-  }),
-  switchChat: (id) => {
-    const chat = get().chats.find((c) => c.id === id);
-    if (!chat) return [];
-    set({
-      activeChatId: id,
-      messages: chat.messages,
-      highlightedTours: [],
-      showChatList: false,
-      streamingId: null
-    });
-    return chat.messages;
-  },
-  deleteChat: (id) => set((s) => {
-    const rest = s.chats.filter((c) => c.id !== id);
-    if (!rest.length) {
-      const chat = newChat();
-      return { chats: [chat], activeChatId: chat.id, messages: chat.messages };
-    }
-    if (s.activeChatId !== id) return { chats: rest };
-    const last = rest[rest.length - 1];
-    return { chats: rest, activeChatId: last.id, messages: last.messages };
-  })
-}));
-useAssistantStore.subscribe((state, prev) => {
-  if (state.messages === prev.messages && state.chats === prev.chats) return;
-  if (state.messages !== prev.messages) {
-    const chats = state.chats.map(
-      (c) => c.id === state.activeChatId ? {
-        ...c,
-        messages: state.messages,
-        title: c.title === "\u041D\u043E\u0432\u044B\u0439 \u0447\u0430\u0442" ? titleFrom(state.messages) : c.title,
-        updatedAt: Date.now()
-      } : c
-    );
-    useAssistantStore.setState({ chats }, false);
-    saveChats(chats, state.activeChatId);
-    return;
-  }
-  saveChats(state.chats, state.activeChatId);
-});
 function AiHomePage({ autoOpenChat = true }) {
   const highlightedTours = useAssistantStore((s) => s.highlightedTours);
   const isTyping = useAssistantStore((s) => s.isTyping);
@@ -1604,6 +1630,6 @@ function ChatWidget({ fullscreenOnOpen = false }) {
   ] });
 }
 
-export { AiAssistantProvider, AiHomePage, AiTourDetailPage, ChatMessage, ChatWidget, QuickActions, SchemaVisualizer, TourCard, TourGrid, configureAiAssistant, getAiConfig, getApiBase, getTourHref, getWsUrl, useAssistant, useAssistantStore, useWebSocket };
+export { AiAssistantProvider, AiHomePage, AiTourDetailPage, ChatMessage, ChatWidget, QuickActions, SchemaVisualizer, TourCard, TourGrid, useAssistant, useAssistantStore, useWebSocket };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

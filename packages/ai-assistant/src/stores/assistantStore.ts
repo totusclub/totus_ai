@@ -14,6 +14,7 @@ interface AssistantState {
   streamingId: string | null
   highlightedTours: Tour[]
   showSchema: boolean
+  hydrated: boolean
   toggleOpen: () => void
   setOpen: (open: boolean) => void
   setConnected: (connected: boolean) => void
@@ -30,6 +31,7 @@ interface AssistantState {
   startNewChat: () => void
   switchChat: (id: string) => ChatMessage[]
   deleteChat: (id: string) => void
+  hydrateFromRemote: (payload: { chats: ChatSession[]; activeId: string } | null) => void
 }
 
 const welcome: ChatMessage = {
@@ -90,15 +92,37 @@ function newChat(): ChatSession {
   }
 }
 
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+
 function saveChats(chats: ChatSession[], activeId: string) {
-  try {
-    const trimmed = chats
-      .slice(-30)
-      .map((c) => ({ ...c, messages: c.messages.slice(-60) }))
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ chats: trimmed, activeId }))
-  } catch {
-    // storage may be unavailable — never break the chat because of it
-  }
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    void (async () => {
+      try {
+        const { isRemoteHistoryEnabled, upsertRemoteChat, setRemoteActiveChat } = await import(
+          '@/lib/historyApi'
+        )
+        if (await isRemoteHistoryEnabled()) {
+          const active = chats.find((c) => c.id === activeId) ?? chats[chats.length - 1]
+          if (active) {
+            await upsertRemoteChat(active)
+            await setRemoteActiveChat(active.id)
+          }
+          return
+        }
+      } catch {
+        /* fall through to local */
+      }
+      try {
+        const trimmed = chats
+          .slice(-30)
+          .map((c) => ({ ...c, messages: c.messages.slice(-60) }))
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ chats: trimmed, activeId }))
+      } catch {
+        // storage may be unavailable — never break the chat because of it
+      }
+    })()
+  }, 700)
 }
 
 /** Chat title = first customer question, trimmed. */
@@ -123,12 +147,30 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   streamingId: null,
   highlightedTours: [],
   showSchema: false,
+  hydrated: false,
   toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
   setOpen: (open) => set({ isOpen: open }),
   setConnected: (connected) => set({ isConnected: connected }),
   setTyping: (typing) => set({ isTyping: typing, ...(typing ? {} : { typingStatus: null }) }),
   setTypingStatus: (status) => set({ typingStatus: status }),
   setShowSchema: (show) => set({ showSchema: show }),
+  hydrateFromRemote: (payload) => {
+    if (!payload || !payload.chats.length) {
+      set({ hydrated: true })
+      return
+    }
+    const active =
+      payload.chats.find((c) => c.id === payload.activeId) ?? payload.chats[0]
+    set({
+      chats: payload.chats,
+      activeChatId: active.id,
+      messages: active.messages,
+      hydrated: true,
+      streamingId: null,
+      isTyping: false,
+      typingStatus: null,
+    })
+  },
   addMessage: (message) => {
     const id = message.id ?? uid('msg')
     set((s) => ({
@@ -189,7 +231,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     })
     return chat.messages
   },
-  deleteChat: (id) =>
+  deleteChat: (id) => {
+    void import('@/lib/historyApi').then(({ deleteRemoteChat }) => deleteRemoteChat(id))
     set((s) => {
       const rest = s.chats.filter((c) => c.id !== id)
       if (!rest.length) {
@@ -199,10 +242,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       if (s.activeChatId !== id) return { chats: rest }
       const last = rest[rest.length - 1]
       return { chats: rest, activeChatId: last.id, messages: last.messages }
-    }),
+    })
+  },
 }))
 
-// Keep the active chat in sync with its messages and persist everything.
+// Keep the active chat in sync with its messages and persist (MySQL or localStorage).
 useAssistantStore.subscribe((state, prev) => {
   if (state.messages === prev.messages && state.chats === prev.chats) return
   if (state.messages !== prev.messages) {

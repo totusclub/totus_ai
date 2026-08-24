@@ -2,6 +2,29 @@ import * as react from 'react';
 import { ReactNode } from 'react';
 import * as zustand from 'zustand';
 
+type AiAssistantConfig = {
+    /** HTTP API prefix, e.g. https://apiv2.totus.club/api or /api */
+    apiBase: string;
+    /** WebSocket URL, e.g. wss://apiv2.totus.club/ws/assistant */
+    wsUrl?: string;
+    /** Base path for tour detail links, default /tours */
+    tourBasePath: string;
+    /** Home link for «Все туры», default / */
+    homePath: string;
+    /**
+     * JWT access token (same as site login).
+     * When present, chat history is stored in MySQL via API (not localStorage).
+     */
+    getAccessToken?: () => string | null | Promise<string | null>;
+    /** auto (default) | remote | local */
+    historyMode?: 'auto' | 'remote' | 'local';
+};
+declare function configureAiAssistant(partial: Partial<AiAssistantConfig>): void;
+declare function getAiConfig(): AiAssistantConfig;
+declare function getApiBase(): string;
+declare function getTourHref(tourId: string, room?: string): string;
+declare function getWsUrl(): string;
+
 type AiAssistantProviderProps = {
     children: ReactNode;
     /** e.g. https://apiv2.totus.club/api */
@@ -12,29 +35,15 @@ type AiAssistantProviderProps = {
     tourBasePath?: string;
     /** e.g. / or /ai */
     homePath?: string;
+    getAccessToken?: AiAssistantConfig['getAccessToken'];
+    historyMode?: AiAssistantConfig['historyMode'];
     /**
      * `page` — полноценная AI-страница (фон + min-height).
      * `widget` — только плавающий чат на сайте-хосте (без влияния на layout).
      */
     shell?: 'page' | 'widget';
 };
-declare function AiAssistantProvider({ children, apiBase, wsUrl, tourBasePath, homePath, shell, }: AiAssistantProviderProps): react.JSX.Element;
-
-type AiAssistantConfig = {
-    /** HTTP API prefix, e.g. https://apiv2.totus.club/api or /api */
-    apiBase: string;
-    /** WebSocket URL, e.g. wss://apiv2.totus.club/ws/assistant */
-    wsUrl?: string;
-    /** Base path for tour detail links, default /tours */
-    tourBasePath: string;
-    /** Home link for «Все туры», default / */
-    homePath: string;
-};
-declare function configureAiAssistant(partial: Partial<AiAssistantConfig>): void;
-declare function getAiConfig(): AiAssistantConfig;
-declare function getApiBase(): string;
-declare function getTourHref(tourId: string, room?: string): string;
-declare function getWsUrl(): string;
+declare function AiAssistantProvider({ children, apiBase, wsUrl, tourBasePath, homePath, getAccessToken, historyMode, shell, }: AiAssistantProviderProps): react.JSX.Element;
 
 declare function AiHomePage({ autoOpenChat }: {
     autoOpenChat?: boolean;
@@ -281,6 +290,7 @@ interface AssistantState {
     streamingId: string | null;
     highlightedTours: Tour[];
     showSchema: boolean;
+    hydrated: boolean;
     toggleOpen: () => void;
     setOpen: (open: boolean) => void;
     setConnected: (connected: boolean) => void;
@@ -299,6 +309,10 @@ interface AssistantState {
     startNewChat: () => void;
     switchChat: (id: string) => ChatMessage$1[];
     deleteChat: (id: string) => void;
+    hydrateFromRemote: (payload: {
+        chats: ChatSession[];
+        activeId: string;
+    } | null) => void;
 }
 interface ChatSession {
     id: string;

@@ -1,7 +1,7 @@
 {
   "name": "@tosmedia/ai-assistant",
-  "version": "1.0.16",
-  "description": "Totus AI assistant UI (\u041c\u0438\u043b\u0430) \u2014 embeddable React components",
+  "version": "1.0.17",
+  "description": "Totus AI assistant UI (Мила) — embeddable React components",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

@@ -1,0 +1,41 @@
+{
+  "name": "@tosmedia/ai-assistant-native",
+  "version": "1.2.1",
+  "description": "Totus AI assistant (Мила) — React Native chat widget",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "react-native": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./dist/index.js",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "@react-native-async-storage/async-storage": ">=1.17.0",
+    "react": ">=18.0.0",
+    "react-native": ">=0.73.0"
+  },
+  "peerDependenciesMeta": {
+    "@react-native-async-storage/async-storage": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "zustand": "^5.0.14"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tosmedia/totus_ai_v2.git",
+    "directory": "packages/ai-assistant-native"
+  },
+  "license": "UNLICENSED"
+}

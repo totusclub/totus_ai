@@ -26,7 +26,14 @@ import {
   supportedCountries,
 } from './levelTravel.js'
 import { logDir, readRecentLog, readSessions } from './chatLog.js'
-import { requireAuth } from './authUser.js'
+import {
+  requireAuth,
+  requireStaff,
+  authenticateWs,
+  authMode,
+  guestAccessAllowed,
+  type AuthPrincipal,
+} from './authUser.js'
 import { dbStatus, ensureChatSchema, isDbConfigured } from './db.js'
 import { registerChatHistoryRoutes } from './chatHistory.js'
 import type { BookingRequest, SearchFilters, Tour } from './types.js'
@@ -150,14 +157,17 @@ app.get('/api/tours/:id', (req, res) => {
   res.json(tour)
 })
 
+// Диагностика (/api/debug/*, /api/logs*, /api/schema) — только staff-токен
+// (SECURITY_JWT_PLAN_RU.md, волна 4). В AUTH_MODE=log — пропуск с логом [AUTH].
+
 /** Which destinations we can actually search. */
-app.get('/api/debug/countries', (_req, res) => {
+app.get('/api/debug/countries', requireStaff, (_req, res) => {
   const list = supportedCountries()
   res.json({ count: list.length, countries: list })
 })
 
 /** Raw hotel reference — diagnostics only, lets us see the real field names. */
-app.get('/api/debug/hotel/:id', async (req, res) => {
+app.get('/api/debug/hotel/:id', requireStaff, async (req, res) => {
   const hotelId = Number(String(req.params.id).replace(/^lt_/, ''))
   if (!Number.isFinite(hotelId)) {
     res.status(400).json({ error: 'bad hotel id' })
@@ -171,7 +181,7 @@ app.get('/api/debug/hotel/:id', async (req, res) => {
 })
 
 /** Raw reviews response — diagnostics only. */
-app.get('/api/debug/reviews/:id', async (req, res) => {
+app.get('/api/debug/reviews/:id', requireStaff, async (req, res) => {
   const hotelId = Number(String(req.params.id).replace(/^lt_/, ''))
   if (!Number.isFinite(hotelId)) {
     res.status(400).json({ error: 'bad hotel id' })
@@ -185,13 +195,13 @@ app.get('/api/debug/reviews/:id', async (req, res) => {
 })
 
 /** Diagnostic journal of real dialogues — for debugging, not for customers. */
-app.get('/api/logs', (req, res) => {
+app.get('/api/logs', requireStaff, (req, res) => {
   const limit = Math.min(Number(req.query.limit ?? 200) || 200, 2000)
   const session = req.query.session ? String(req.query.session) : undefined
   res.json({ dir: logDir(), entries: readRecentLog(limit, session) })
 })
 
-app.get('/api/logs/sessions', (_req, res) => {
+app.get('/api/logs/sessions', requireStaff, (_req, res) => {
   res.json({ dir: logDir(), sessions: readSessions(50) })
 })
 
@@ -278,15 +288,23 @@ app.post('/api/bookings', (req, res) => {
   res.status(201).json(booking)
 })
 
-app.get('/api/schema', (_req, res) => {
+app.get('/api/schema', requireStaff, (_req, res) => {
   res.json(SCHEMA_TABLES)
 })
 
 const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws/assistant' })
 const sessions = new WeakMap<WebSocket, Session>()
+// Кто подключён (по JWT из ?token=). Гости — без записи. В LLM ничего из этого не уходит.
+const wsPrincipals = new WeakMap<WebSocket, AuthPrincipal>()
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  const auth = authenticateWs(req)
+  if (auth.status === 'reject') {
+    ws.close(4401, 'unauthorized')
+    return
+  }
+  if (auth.status === 'ok') wsPrincipals.set(ws, auth.principal)
   sessions.set(ws, createSession())
 
   ws.on('message', async (raw) => {
@@ -387,6 +405,9 @@ server.listen(PORT, () => {
     db.configured
       ? `MySQL chats: ON · ${db.host}/${db.database}`
       : 'MySQL chats: OFF — set DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET',
+  )
+  console.log(
+    `[AUTH] mode=${authMode()} (AUTH_MODE=log|enforce) · WS guests: ${guestAccessAllowed() ? 'allowed' : 'denied'} (AI_GUEST_ACCESS) · JWT_SECRET loaded: ${Boolean(process.env.JWT_SECRET)}`,
   )
   // Pull the canonical departure-city spellings from Level.Travel so the API
   // names never have to be guessed (background, non-blocking).

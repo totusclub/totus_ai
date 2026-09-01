@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { getWsUrl } from '@/config'
+import { getAiConfig, getWsUrl } from '@/config'
 import { useAssistantStore } from '@/stores/assistantStore'
 import type { WsServerMessage } from '@/types'
 import { uid } from '@/lib/utils'
@@ -8,6 +8,8 @@ export function useWebSocket(enabled = true) {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const manualCloseRef = useRef(false)
+  // Номер попытки подключения: пока ждём токен, могла начаться новая попытка.
+  const connectSeqRef = useRef(0)
 
   // Subscribe to actions INDIVIDUALLY. Zustand action identities are stable, so
   // these selectors never change between renders. Destructuring the whole store
@@ -193,25 +195,43 @@ export function useWebSocket(enabled = true) {
       return
     }
 
-    const ws = new WebSocket(getWsUrl())
-    wsRef.current = ws
+    // JWT пользователя (если сайт передал getAccessToken) уходит в handshake как
+    // ?token=; гости подключаются без него. Токен берём при каждом подключении —
+    // он мог обновиться после refresh.
+    const attempt = ++connectSeqRef.current
+    Promise.resolve()
+      .then(() => getAiConfig().getAccessToken?.() ?? null)
+      .catch(() => null)
+      .then((token) => {
+        if (manualCloseRef.current || attempt !== connectSeqRef.current) return
+        const current = wsRef.current
+        if (
+          current &&
+          (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)
+        ) {
+          return
+        }
 
-    ws.onopen = () => {
-      setConnected(true)
-      // The server session died with the old socket. If the customer already
-      // has a dialogue on screen, replay it so the assistant keeps context.
-      const payload = buildRestorePayload()
-      if (payload.messages.length) ws.send(JSON.stringify(payload))
-    }
-    ws.onclose = () => {
-      setConnected(false)
-      // Only auto-reconnect if the close wasn't triggered by unmount/cleanup.
-      if (!manualCloseRef.current) {
-        reconnectRef.current = setTimeout(connect, 2000)
-      }
-    }
-    ws.onerror = () => ws.close()
-    ws.onmessage = (event) => handleMessageRef.current(event)
+        const ws = new WebSocket(withToken(getWsUrl(), token))
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          setConnected(true)
+          // The server session died with the old socket. If the customer already
+          // has a dialogue on screen, replay it so the assistant keeps context.
+          const payload = buildRestorePayload()
+          if (payload.messages.length) ws.send(JSON.stringify(payload))
+        }
+        ws.onclose = () => {
+          setConnected(false)
+          // Only auto-reconnect if the close wasn't triggered by unmount/cleanup.
+          if (!manualCloseRef.current) {
+            reconnectRef.current = setTimeout(connect, 2000)
+          }
+        }
+        ws.onerror = () => ws.close()
+        ws.onmessage = (event) => handleMessageRef.current(event)
+      })
   }, [enabled, setConnected])
 
   useEffect(() => {
@@ -294,6 +314,16 @@ function buildRestorePayload() {
     }
   }
   return { type: 'restore', messages: history.slice(-40), hotels: hotels.slice(-8) }
+}
+
+/**
+ * JWT в handshake WebSocket: сервер Милы читает `?token=` (SECURITY_JWT_PLAN_RU.md,
+ * волна 4). Без токена подключение гостевое — как и раньше.
+ */
+function withToken(url: string, token: string | null | undefined): string {
+  if (!token) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}token=${encodeURIComponent(token)}`
 }
 
 /** Friendly, user-facing wording for the current step. */

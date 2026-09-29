@@ -905,10 +905,425 @@ async function waitForSearch(requestId: string, maxWaitMs = 60000) {
   return lastStatus
 }
 
-async function getGroupedHotels(requestId: string, operatorIds: string[] = []) {
-  const params: Record<string, string | number | undefined> = { request_id: requestId }
+async function getGroupedHotels(
+  requestId: string,
+  operatorIds: string[] = [],
+  extra: Record<string, string | number> = {},
+) {
+  const params: Record<string, string | number | undefined> = { request_id: requestId, ...extra }
   if (operatorIds.length) params.operator_ids = operatorIds.join(',')
   return ltGet<{ hotels?: unknown[]; success?: boolean }>('/search/get_grouped_hotels', params)
+}
+
+/* Level.Travel list filters.
+ * The same filters the site sidebar sends to /search/get_grouped_hotels
+ * (filter_aquapark, filter_regions, filter_meals …). Level.Travel filters the
+ * WHOLE result set on its side, so an amenity request such as «с аквапарком»
+ * returns every matching hotel instead of whatever happened to be on the first
+ * (cheapest) page. Option ids are taken from the `filters` facets of the same
+ * search, so we only ever send values Level.Travel itself offered.
+ */
+
+/** Boolean amenity filters (filter_<key>=true). */
+export const LT_AMENITY_KEYS = [
+  'aquapark',
+  'pool',
+  'kids_pool',
+  'heated_pool',
+  'kids_club',
+  'kids_menu',
+  'nanny',
+  'aircon',
+  'parking',
+  'bar',
+  'massage',
+  'thermal_fun',
+  'adults_only',
+  'no_single_men',
+  'direct_flight',
+] as const
+export type LtAmenity = (typeof LT_AMENITY_KEYS)[number]
+
+const LT_AMENITY_LABELS: Record<LtAmenity, string> = {
+  aquapark: 'аквапарк',
+  pool: 'бассейн',
+  kids_pool: 'детский бассейн',
+  heated_pool: 'подогреваемый бассейн',
+  kids_club: 'детский клуб',
+  kids_menu: 'детское меню',
+  nanny: 'няня',
+  aircon: 'кондиционер',
+  parking: 'парковка',
+  bar: 'бар',
+  massage: 'массаж',
+  thermal_fun: 'термальные процедуры',
+  adults_only: 'только для взрослых',
+  no_single_men: 'без одиноких мужчин',
+  direct_flight: 'прямой перелёт',
+}
+
+/** Russian feature names the assistant uses → Level.Travel amenity filter. */
+const FEATURE_TO_AMENITY: Record<string, LtAmenity> = {
+  аквапарк: 'aquapark',
+  'водные горки': 'aquapark',
+  горки: 'aquapark',
+  бассейн: 'pool',
+  'детский бассейн': 'kids_pool',
+  'подогреваемый бассейн': 'heated_pool',
+  'бассейн с подогревом': 'heated_pool',
+  'детский клуб': 'kids_club',
+  'мини-клуб': 'kids_club',
+  'детское меню': 'kids_menu',
+  няня: 'nanny',
+  кондиционер: 'aircon',
+  парковка: 'parking',
+  бар: 'bar',
+  массаж: 'massage',
+  'термальные процедуры': 'thermal_fun',
+  хаммам: 'thermal_fun',
+  сауна: 'thermal_fun',
+  'только для взрослых': 'adults_only',
+  'без одиноких мужчин': 'no_single_men',
+  'прямой перелёт': 'direct_flight',
+  'прямой перелет': 'direct_flight',
+}
+const WIFI_FEATURES = new Set(['wifi', 'wi-fi', 'бесплатный wifi', 'бесплатный wi-fi', 'вайфай'])
+
+/**
+ * Split the assistant's `features` into what Level.Travel can filter itself
+ * and what is left for the text-based soft filter (анимация, спа, теннис…).
+ */
+export function splitFeatures(features: string[] = []) {
+  const amenities = new Set<LtAmenity>()
+  const rest: string[] = []
+  let wifiFree = false
+  for (const raw of features) {
+    const key = String(raw ?? '').trim().toLowerCase()
+    if (!key) continue
+    const amenity = FEATURE_TO_AMENITY[key] ?? FEATURE_TO_AMENITY[key.replace(/ё/g, 'е')]
+    if (amenity) amenities.add(amenity)
+    else if (WIFI_FEATURES.has(key)) wifiFree = true
+    else rest.push(key)
+  }
+  return { amenities: [...amenities], wifiFree, rest }
+}
+
+/** Food codes the assistant sends → every Level.Travel meal id of that family. */
+const MEAL_FAMILIES: Record<string, string[]> = {
+  RO: ['RO'],
+  BB: ['BB', 'BB2'],
+  HB: ['HB', 'HBD', 'HB+', 'HBL'],
+  FB: ['FB', 'FB+'],
+  AI: ['AI', 'AI24', 'AIP'],
+  UAI: ['UAI'],
+  AIL: ['AIL'],
+  AI24: ['AI24'],
+  AIP: ['AIP'],
+}
+
+const BEACH_SURFACE_IDS: Record<string, string[]> = {
+  песчаный: ['SAND'],
+  галечный: ['PEBBLE'],
+  'песчано-галечный': ['SAND+PEBBLE', 'SAND_PEBBLE'],
+  платформа: ['PLATFORM', 'CONCRETE'],
+  коралловый: ['CORAL'],
+}
+
+/**
+ * Resort nicknames and villages → the Level.Travel region they belong to.
+ * Level.Travel groups Lara under Antalya, Tekirova under Kemer and so on.
+ */
+const REGION_ALIASES: Record<string, string> = {
+  lara: 'анталья',
+  лара: 'анталья',
+  конъяалты: 'анталья',
+  коньяалты: 'анталья',
+  konyaalti: 'анталья',
+  antalya: 'анталья',
+  kemer: 'кемер',
+  бельдиби: 'кемер',
+  гейнюк: 'кемер',
+  кириш: 'кемер',
+  текирова: 'кемер',
+  чамьюва: 'кемер',
+  alanya: 'аланья',
+  махмутлар: 'аланья',
+  конаклы: 'аланья',
+  авсаллар: 'аланья',
+  тюрклер: 'аланья',
+  окурджалар: 'аланья',
+  side: 'сиде',
+  манавгат: 'сиде',
+  колаклы: 'сиде',
+  чолаклы: 'сиде',
+  кизилот: 'сиде',
+  кызылот: 'сиде',
+  эвренсеки: 'сиде',
+  belek: 'белек',
+  богазкент: 'белек',
+  кадрие: 'белек',
+  bodrum: 'бодрум',
+  marmaris: 'мармарис',
+  fethiye: 'фетхие',
+  istanbul: 'стамбул',
+  hurghada: 'хургада',
+  sharm: 'шарм-эль-шейх',
+  шарм: 'шарм-эль-шейх',
+}
+
+function normName(s: string) {
+  return s.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/g, ' ').trim()
+}
+
+type FacetOption = { id: unknown; name?: unknown; rest_type?: unknown; hotel_count?: unknown }
+
+function facetOptions(facets: Record<string, unknown> | null, key: string): FacetOption[] {
+  const list = facets?.[key]
+  if (!Array.isArray(list)) return []
+  return list.filter((o): o is FacetOption => Boolean(o) && typeof o === 'object')
+}
+
+function facetIds(facets: Record<string, unknown> | null, key: string) {
+  return facetOptions(facets, key)
+    .filter((o) => Number(o.hotel_count ?? 1) > 0)
+    .map((o) => String(o.id))
+}
+
+export interface LtFilterRequest {
+  starsFrom?: number
+  starsTo?: number
+  mealTypes?: string[]
+  firstLine?: boolean
+  beachLines?: number[]
+  beachTypes?: string[]
+  beachType?: string
+  minRating?: number
+  priceMin?: number
+  priceMax?: number
+  amenities?: string[]
+  features?: string[]
+  resorts?: string[]
+  restType?: string
+  hotelTypes?: string[]
+  categories?: string[]
+  wifiFree?: boolean
+  instantConfirm?: boolean
+}
+
+/** Does the request contain anything Level.Travel can filter on its side? */
+export function hasLtFilterRequest(input: LtFilterRequest) {
+  const split = splitFeatures(input.features)
+  return Boolean(
+    input.amenities?.length ||
+      split.amenities.length ||
+      split.wifiFree ||
+      input.wifiFree ||
+      input.resorts?.length ||
+      input.restType ||
+      input.mealTypes?.length ||
+      input.firstLine ||
+      input.beachLines?.length ||
+      input.beachTypes?.length ||
+      input.beachType ||
+      input.hotelTypes?.length ||
+      input.categories?.length ||
+      input.instantConfirm ||
+      (input.minRating && input.minRating > 0) ||
+      input.starsFrom ||
+      input.starsTo ||
+      (input.priceMax && input.priceMax > 10000),
+  )
+}
+
+/**
+ * Turn the assistant's request into Level.Travel filter_* params, using only
+ * option ids present in this search's facets. Returns human labels of what was
+ * applied and of what could not be (no such option in this search) so the
+ * assistant can report both honestly.
+ */
+export function buildLtFilterParams(
+  input: LtFilterRequest,
+  facetsRaw: unknown,
+): { params: Record<string, string | number>; applied: string[]; unavailable: string[] } {
+  const facets = asRecord(facetsRaw) ?? null
+  const params: Record<string, string | number> = {}
+  const applied: string[] = []
+  const unavailable: string[] = []
+
+  // Amenities (aquapark, kids club …)
+  const split = splitFeatures(input.features)
+  const amenities = new Set<string>([...(input.amenities ?? []), ...split.amenities])
+  for (const a of amenities) {
+    if (!(LT_AMENITY_KEYS as readonly string[]).includes(a)) continue
+    const label = LT_AMENITY_LABELS[a as LtAmenity]
+    const yes = facetOptions(facets, a).find((o) => o.id === true || String(o.id) === 'true')
+    if (yes && Number(yes.hotel_count ?? 0) > 0) {
+      params[`filter_${a}`] = 'true'
+      applied.push(label)
+    } else {
+      unavailable.push(label)
+    }
+  }
+
+  if (input.wifiFree || split.wifiFree) {
+    if (facetIds(facets, 'wifi').includes('FREE')) {
+      params.filter_wifi = 'FREE'
+      applied.push('бесплатный Wi-Fi')
+    } else unavailable.push('бесплатный Wi-Fi')
+  }
+
+  // Resorts / regions inside the country
+  const regions = facetOptions(facets, 'regions').filter((o) => Number(o.hotel_count ?? 1) > 0)
+  if (input.resorts?.length) {
+    const ids: string[] = []
+    const names: string[] = []
+    for (const raw of input.resorts) {
+      const q = normName(String(raw ?? ''))
+      if (!q) continue
+      const target = REGION_ALIASES[q] ? normName(REGION_ALIASES[q]) : q
+      const hit = regions.find((r) => {
+        const n = normName(String(r.name ?? ''))
+        if (!n) return false
+        if (n === target) return true
+        return target.length >= 4 && (n.startsWith(target) || target.startsWith(n))
+      })
+      if (hit) {
+        if (!ids.includes(String(hit.id))) {
+          ids.push(String(hit.id))
+          names.push(String(hit.name))
+        }
+      } else unavailable.push(`курорт «${String(raw).trim()}»`)
+    }
+    if (ids.length) {
+      params.filter_regions = ids.join(',')
+      applied.push(`курорты: ${names.join(', ')}`)
+    }
+  } else if (input.restType) {
+    const ids = regions.filter((r) => r.rest_type === input.restType).map((r) => String(r.id))
+    const label =
+      input.restType === 'beach' ? 'только пляжные курорты' : input.restType === 'ski' ? 'горнолыжные курорты' : 'экскурсионные города'
+    if (ids.length && ids.length < regions.length) {
+      params.filter_regions = ids.join(',')
+      applied.push(label)
+    } else if (!ids.length) unavailable.push(label)
+  }
+
+  // Stars
+  if (input.starsFrom || input.starsTo) {
+    const from = input.starsFrom ?? 1
+    const to = input.starsTo ?? 5
+    const ids = facetIds(facets, 'stars').filter((id) => {
+      const n = Number(id)
+      return n > 0 && n >= from && n <= to
+    })
+    if (ids.length) {
+      params.filter_stars = ids.join(',')
+      applied.push(from === to ? `${from}★` : `${from}★${to < 5 ? `–${to}★` : ' и выше'}`)
+    } else unavailable.push(`${from}★`)
+  }
+
+  // Meals
+  if (input.mealTypes?.length) {
+    const available = new Set(facetIds(facets, 'meals'))
+    const ids = [
+      ...new Set(
+        input.mealTypes.flatMap((m) => MEAL_FAMILIES[String(m).toUpperCase()] ?? [String(m).toUpperCase()]),
+      ),
+    ].filter((id) => available.has(id))
+    if (ids.length) {
+      params.filter_meals = ids.join(',')
+      // Level.Travel's own Russian names («Всё включено 24 часа»), never codes.
+      const mealNames = new Map(facetOptions(facets, 'meals').map((o) => [String(o.id), String(o.name ?? '')]))
+      const names = ids.map((id) => mealNames.get(id) || mealLabel(id)).filter((n) => !/^[A-Z0-9+]+$/.test(n))
+      applied.push(`питание: ${[...new Set(names)].join(', ').toLowerCase()}`)
+    } else unavailable.push('выбранный тип питания')
+  }
+
+  // Beach line
+  const lines = new Set<number>(input.beachLines ?? [])
+  if (input.firstLine) lines.add(1)
+  if (lines.size) {
+    const available = new Set(facetIds(facets, 'line'))
+    const ids = [...lines].map(String).filter((id) => available.has(id))
+    if (ids.length) {
+      params.filter_line = ids.join(',')
+      applied.push(ids.map((id) => `${id}-я линия`).join(', '))
+    } else unavailable.push([...lines].map((l) => `${l}-я линия`).join(', '))
+  }
+
+  // Beach surface / beach type
+  if (input.beachTypes?.length) {
+    const available = new Set(facetIds(facets, 'beach_surface'))
+    const ids = [
+      ...new Set(input.beachTypes.flatMap((b) => BEACH_SURFACE_IDS[String(b).toLowerCase()] ?? [])),
+    ].filter((id) => available.has(id))
+    if (ids.length) {
+      params.filter_beach_surface = ids.join(',')
+      applied.push(`пляж: ${input.beachTypes.join(', ')}`)
+    } else unavailable.push(`пляж: ${input.beachTypes.join(', ')}`)
+  }
+  if (input.beachType) {
+    const id = input.beachType.toUpperCase()
+    const label = id === 'DESIGNATED' ? 'собственный пляж' : 'общественный пляж'
+    if (facetIds(facets, 'beach_type').includes(id)) {
+      params.filter_beach_type = id
+      applied.push(label)
+    } else unavailable.push(label)
+  }
+
+  // Rating (Level.Travel facets are on a 10-point scale: «от 8»)
+  if (input.minRating && input.minRating > 0) {
+    const ids = facetIds(facets, 'rating')
+      .map(Number)
+      .filter((n) => Number.isFinite(n) && n <= input.minRating!)
+      .sort((a, b) => b - a)
+    if (ids.length) {
+      params.filter_rating = String(ids[0])
+      applied.push(`рейтинг от ${ids[0]}`)
+    }
+  }
+
+  // Hotel type (отель, вилла, апартаменты …)
+  if (input.hotelTypes?.length) {
+    const opts = facetOptions(facets, 'hotel_type').filter((o) => Number(o.hotel_count ?? 1) > 0)
+    const hits = input.hotelTypes
+      .map((t) => opts.find((o) => normName(String(o.name ?? '')) === normName(String(t))))
+      .filter((o): o is FacetOption => Boolean(o))
+    if (hits.length) {
+      params.filter_hotel_type = [...new Set(hits.map((o) => String(o.id)))].join(',')
+      applied.push(`тип: ${hits.map((o) => String(o.name)).join(', ')}`)
+    } else unavailable.push(`тип размещения: ${input.hotelTypes.join(', ')}`)
+  }
+
+  // Category (для семьи / для пар / активный отдых)
+  if (input.categories?.length) {
+    const available = new Set(facetIds(facets, 'category'))
+    const ids = input.categories.map((c) => String(c).toUpperCase()).filter((id) => available.has(id))
+    const label = (id: string) => (id === 'FAMILY' ? 'для семьи' : id === 'COUPLES' ? 'для пар' : 'активный отдых')
+    if (ids.length) {
+      params.filter_category = ids.join(',')
+      applied.push(`категория: ${ids.map(label).join(', ')}`)
+    } else unavailable.push(`категория: ${input.categories.map((c) => label(String(c).toUpperCase())).join(', ')}`)
+  }
+
+  if (input.instantConfirm) {
+    params.filter_instant_confirm = 'true'
+    applied.push('мгновенное подтверждение')
+  }
+
+  // Budget in roubles (same units as hotel prices). Small numbers are ambiguous
+  // («150» = thousands?) and stay with the local filter only.
+  if (input.priceMax && input.priceMax > 10000) {
+    const prices = asRecord(facets?.prices)
+    const floor = Number(prices?.min)
+    params.filter_price_max = Math.round(input.priceMax)
+    params.filter_price_min = Math.round(
+      input.priceMin && input.priceMin > 0 ? input.priceMin : Number.isFinite(floor) ? floor : 0,
+    )
+    applied.push(`до ${Math.round(input.priceMax).toLocaleString('ru-RU')} ₽`)
+  }
+
+  return { params, applied, unavailable }
 }
 
 export async function searchLevelTravelPackages(input: {
@@ -930,6 +1345,20 @@ export async function searchLevelTravelPackages(input: {
   hotelName?: string
   hotelNames?: string[]
   features?: string[]
+  /** Level.Travel amenity keys (aquapark, kids_club …), see LT_AMENITY_KEYS */
+  amenities?: string[]
+  /** Resorts inside the country (Кемер, Анталья …) → filter_regions */
+  resorts?: string[]
+  /** 'beach' — only beach regions (no Istanbul / Cappadocia for a sea holiday) */
+  restType?: string
+  beachLines?: number[]
+  /** DESIGNATED (own beach) | PUBLIC */
+  beachType?: string
+  hotelTypes?: string[]
+  /** FAMILY | COUPLES | ACTIVE */
+  categories?: string[]
+  wifiFree?: boolean
+  instantConfirm?: boolean
   sortBy?: 'price' | 'rating' | 'stars'
   limit?: number
 }): Promise<{
@@ -944,6 +1373,13 @@ export async function searchLevelTravelPackages(input: {
     featuresApplied?: boolean
     featuresMatched?: number
     assumedCountry?: string
+    /** Filters Level.Travel applied on its side (human labels) */
+    ltFiltersApplied?: string[]
+    /** Requested filters this search has no option for (human labels) */
+    ltFiltersUnavailable?: string[]
+    /** Hotels matching the Level.Travel filters (whole result set, not a page) */
+    ltHotelsCount?: number
+    ltFilterError?: string
   }
 }> {
   if (!isLevelTravelEnabled()) {
@@ -1002,15 +1438,49 @@ export async function searchLevelTravelPackages(input: {
     })
     .map(([op]) => op)
 
-  let grouped = await getGroupedHotels(
-    requestId,
-    okOperators.length ? okOperators.slice(0, 30) : [],
-  )
+  let groupOperators = okOperators.length ? okOperators.slice(0, 30) : []
+  let grouped = await getGroupedHotels(requestId, groupOperators)
 
   let hotelsRaw = extractHotels(grouped)
   if (!hotelsRaw.length) {
+    groupOperators = []
     grouped = await getGroupedHotels(requestId, [])
     hotelsRaw = extractHotels(grouped)
+  }
+  // Size of the whole unfiltered search (the list itself is only one page).
+  const totalHotels = Number(asRecord(grouped)?.hotels_count) || hotelsRaw.length
+
+  // Level.Travel-side filters: the unfiltered response carries the facets
+  // (options + counts); a second call with filter_* returns ALL matching
+  // hotels. Previously amenities were only text-matched on the first page,
+  // so «5★ с аквапарком» came back as the cheapest Istanbul hotels.
+  const softFeatures = splitFeatures(input.features).rest
+  let ltFiltersApplied: string[] = []
+  let ltFiltersUnavailable: string[] = []
+  let ltHotelsCount: number | undefined
+  let ltFilterError: string | undefined
+  if (hasLtFilterRequest(input)) {
+    const built = buildLtFilterParams(input, asRecord(grouped)?.filters)
+    ltFiltersUnavailable = built.unavailable
+    if (Object.keys(built.params).length) {
+      try {
+        const filtered = await getGroupedHotels(requestId, groupOperators, {
+          ...built.params,
+          page_limit: 100,
+          page_number: 1,
+        })
+        grouped = filtered
+        hotelsRaw = extractHotels(filtered)
+        ltFiltersApplied = built.applied
+        ltHotelsCount = Number(asRecord(filtered)?.hotels_count) || hotelsRaw.length
+      } catch (err) {
+        ltFilterError = err instanceof Error ? err.message : String(err)
+        console.warn(`[level.travel] filtered grouped_hotels failed: ${ltFilterError}`)
+      }
+    }
+    console.log(
+      `[level.travel] filters applied=[${ltFiltersApplied.join(' | ')}] unavailable=[${ltFiltersUnavailable.join(' | ')}] matched=${ltHotelsCount ?? '-'}`,
+    )
   }
 
   console.log(
@@ -1018,7 +1488,7 @@ export async function searchLevelTravelPackages(input: {
   )
   const logSearchStages = (finalCount: number, afterName?: number) =>
     console.log(
-      `[level.travel] search dest="${dest.label}" hotelName="${[...(input.hotelNames ?? []), ...(input.hotelName ? [input.hotelName] : [])].join(' | ')}" date=${startDate} nights=${nights} raw=${hotelsRaw.length}${afterName !== undefined ? ` afterName=${afterName}` : ''} final=${finalCount}`,
+      `[level.travel] search dest="${dest.label}" hotelName="${[...(input.hotelNames ?? []), ...(input.hotelName ? [input.hotelName] : [])].join(' | ')}" date=${startDate} nights=${nights} raw=${totalHotels} page=${hotelsRaw.length}${afterName !== undefined ? ` afterName=${afterName}` : ''} final=${finalCount}`,
     )
 
   const currency = pickString(asRecord(grouped)?.currency_code, 'RUB').toUpperCase()
@@ -1082,7 +1552,11 @@ export async function searchLevelTravelPackages(input: {
     })
   }
   if (input.mealTypes?.length) {
-    const meals = new Set(input.mealTypes.map((m) => m.toUpperCase()))
+    // Same meal families as the Level.Travel filter: «всё включено» (AI)
+    // also covers AI24 / AIP, otherwise those hotels were dropped here.
+    const meals = new Set(
+      input.mealTypes.flatMap((m) => MEAL_FAMILIES[m.toUpperCase()] ?? [m.toUpperCase()]),
+    )
     tours = tours.filter((t) => {
       const h = getCachedHotel(Number(t.id.replace(/^lt_/, '')))
       if (!h?.meal_prices) return true
@@ -1152,7 +1626,7 @@ export async function searchLevelTravelPackages(input: {
   // so a strict filter would wipe the list; we apply it only when it leaves a
   // usable number of hotels and ALWAYS report whether it actually ran, so the
   // assistant can never claim "all of these have an aquapark" without proof.
-  if (input.features?.length) {
+  if (softFeatures.length) {
     const matches = tours.filter((t) => {
       const hotel = getCachedHotel(Number(t.id.replace(/^lt_/, '')))
       const hay = [
@@ -1165,13 +1639,25 @@ export async function searchLevelTravelPackages(input: {
       ]
         .join(' ')
         .toLowerCase()
-      return input.features!.every((f) => featureMatches(hay, f))
+      return softFeatures.every((f) => featureMatches(hay, f))
     })
     featuresMatched = matches.length
     if (matches.length >= 3) {
       tours = matches
       featuresApplied = true
     }
+  }
+  // Amenities Level.Travel filtered itself are confirmed for every hotel in
+  // the list. `featuresApplied` is true only when EVERY requested amenity was
+  // actually filtered — by Level.Travel or by the text filter above.
+  const ltAmenityLabels = [
+    ...new Set([...splitFeatures(input.features).amenities, ...(input.amenities ?? [])]),
+  ]
+    .filter((a): a is LtAmenity => (LT_AMENITY_KEYS as readonly string[]).includes(a))
+    .map((a) => LT_AMENITY_LABELS[a])
+  if (ltAmenityLabels.length) {
+    const ltAmenitiesOk = ltAmenityLabels.every((l) => ltFiltersApplied.includes(l))
+    featuresApplied = ltAmenitiesOk && (softFeatures.length === 0 || featuresApplied)
   }
 
   logSearchStages(tours.length, afterNameCount)
@@ -1214,7 +1700,7 @@ export async function searchLevelTravelPackages(input: {
       hotelSearchIndex.set(hid, { requestId, okOperators, params: searchParams })
     }
   }
-  return { tours, hotels, source: 'level.travel', requestId, okOperators, stats: { raw: hotelsRaw.length, afterName: afterNameCount, featuresApplied, featuresMatched, assumedCountry } }
+  return { tours, hotels, source: 'level.travel', requestId, okOperators, stats: { raw: totalHotels, afterName: afterNameCount, featuresApplied, featuresMatched, assumedCountry, ltFiltersApplied, ltFiltersUnavailable, ltHotelsCount, ltFilterError } }
 }
 
 /**

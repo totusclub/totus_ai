@@ -69,9 +69,49 @@ export const TOUR_TOOLS: ChatCompletionTool[] = [
             description: 'Возраст каждого ребёнка на дату вылета',
           },
           stars_min: { type: 'integer', minimum: 1, maximum: 5 },
+          stars_max: { type: 'integer', minimum: 1, maximum: 5, description: 'Только если клиент ограничил сверху («не дороже четвёрки»)' },
           min_rating: {
             type: 'number',
-            description: 'Минимальный рейтинг отеля',
+            description: 'Минимальный рейтинг отеля по 10-балльной шкале (8 = «хорошие отзывы», 9 = «отличные»)',
+          },
+          resorts: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Курорты/регионы внутри страны, по-русски: ["Кемер"], ["Анталья", "Белек"], ["Хургада"]. Лара, Кунду, Конъяалты — это «Анталья». Несколько курортов — destination = страна, курорты сюда.',
+          },
+          rest_type: {
+            type: 'string',
+            enum: ['beach', 'sightseeing', 'ski'],
+            description:
+              'Тип отдыха. beach — только пляжные курорты (без Стамбула, Каппадокии и т.п.). Ставь beach для любого запроса про море, пляж, аквапарк, всё включено, если курорты не названы.',
+          },
+          beach_lines: {
+            type: 'array',
+            items: { type: 'integer', enum: [1, 2, 3] },
+            description: 'Линии пляжа. «Первая или вторая линия» → [1, 2]. Только первая — first_line=true.',
+          },
+          beach_type: {
+            type: 'string',
+            enum: ['собственный', 'общественный'],
+            description: 'Собственный пляж отеля или общественный',
+          },
+          hotel_types: {
+            type: 'array',
+            items: {
+              type: 'string',
+              enum: ['Отель', 'Апарт-отель', 'Апартаменты', 'Вилла', 'Гостевой дом', 'Мини-отель', 'Бунгало', 'Коттедж', 'Пансионат', 'Хостел'],
+            },
+            description: 'Тип размещения — только если клиент назвал',
+          },
+          categories: {
+            type: 'array',
+            items: { type: 'string', enum: ['для семьи', 'для пар', 'активный отдых'] },
+            description: 'Категория отеля: «семейный отель» → для семьи, «романтика вдвоём» → для пар',
+          },
+          instant_confirm: {
+            type: 'boolean',
+            description: 'Только туры с мгновенным подтверждением брони',
           },
           beach_types: {
             type: 'array',
@@ -84,6 +124,7 @@ export const TOUR_TOOLS: ChatCompletionTool[] = [
           meal_types: {
             type: 'array',
             items: { type: 'string', enum: ['RO', 'BB', 'HB', 'FB', 'AI', 'UAI'] },
+            description: 'AI включает и «всё включено 24 часа», и «премиум всё включено»',
           },
           features: {
             type: 'array',
@@ -92,20 +133,31 @@ export const TOUR_TOOLS: ChatCompletionTool[] = [
               enum: [
                 'аквапарк',
                 'водные горки',
-                'детский клуб',
+                'бассейн',
                 'детский бассейн',
-                'анимация',
                 'подогреваемый бассейн',
+                'детский клуб',
+                'детское меню',
+                'няня',
+                'кондиционер',
+                'парковка',
+                'бар',
+                'массаж',
+                'термальные процедуры',
+                'бесплатный wifi',
+                'только для взрослых',
+                'без одиноких мужчин',
+                'прямой перелёт',
+                'анимация',
                 'крытый бассейн',
                 'спа',
                 'фитнес',
                 'теннис',
-                'wifi',
-                'только для взрослых',
                 'семейные номера',
               ],
             },
-            description: 'Инфраструктура отеля // сверить точный список с документацией',
+            description:
+              'Удобства отеля и перелёта. Всё от «аквапарк» до «прямой перелёт» система фильтрует сама по всей выдаче (это фильтры сайта); анимация, крытый бассейн, спа, фитнес, теннис, семейные номера проверяются только по описанию отеля.',
           },
           hotel_name: {
             type: 'string',
@@ -402,7 +454,7 @@ function hotelFallbackComment(t: Tour): string | undefined {
   const facts = (t.inclusions ?? [])
     .filter((x) => x && !x.toLowerCase().startsWith('проживание'))
     // No prices in the comment — the card already shows them right above.
-    .filter((x) => !/₽|руб|\d{4,}|\d{1,3}(?:[\s\u00a0]\d{3})+/i.test(x))
+    .filter((x) => !/₽|руб|\d{4,}|\d{1,3}(?:[\s ]\d{3})+/i.test(x))
     .slice(0, 3)
   return facts.length ? facts.join(' · ') : undefined
 }
@@ -471,7 +523,9 @@ function toolSummary(name: string, result: unknown): string | undefined {
       const stats = r.search_stats as { raw?: number } | undefined
       const raw = Number(stats?.raw ?? 0)
       return raw > 0
-        ? `в выдаче ${raw} отелей, после фильтров ${total}`
+        ? Array.isArray((r as { filters_applied?: unknown }).filters_applied)
+          ? `всего отелей ${raw}, под ваши пожелания (${((r as { filters_applied: string[] }).filters_applied).join(', ')}) — ${Number(r.hotels_matching_filters ?? total)}`
+          : `в выдаче ${raw} отелей, после фильтров ${total}`
         : `найдено отелей: ${total}`
     }
     case 'get_hotel_offers': {
@@ -566,7 +620,38 @@ async function runTool(
           kidsAges,
           startDate,
           starsFrom: args.stars_min ? Number(args.stars_min) : undefined,
-          minRating: args.min_rating ? Number(args.min_rating) : undefined,
+          starsTo: args.stars_max ? Number(args.stars_max) : undefined,
+          // Hotel ratings are on a 10-point scale; a 5-point value («от 4.5»)
+          // used to wipe out the whole list.
+          minRating: args.min_rating
+            ? Number(args.min_rating) <= 5
+              ? Number(args.min_rating) * 2
+              : Number(args.min_rating)
+            : undefined,
+          resorts: Array.isArray(args.resorts)
+            ? args.resorts.map((x) => String(x).trim()).filter(Boolean)
+            : undefined,
+          restType: ['beach', 'sightseeing', 'ski'].includes(String(args.rest_type))
+            ? String(args.rest_type)
+            : undefined,
+          beachLines: Array.isArray(args.beach_lines)
+            ? args.beach_lines.map(Number).filter((n) => n >= 1 && n <= 3)
+            : undefined,
+          beachType:
+            args.beach_type === 'собственный'
+              ? 'DESIGNATED'
+              : args.beach_type === 'общественный'
+                ? 'PUBLIC'
+                : undefined,
+          hotelTypes: Array.isArray(args.hotel_types) ? (args.hotel_types as string[]) : undefined,
+          categories: Array.isArray(args.categories)
+            ? (args.categories as string[])
+                .map((c) =>
+                  c === 'для семьи' ? 'FAMILY' : c === 'для пар' ? 'COUPLES' : c === 'активный отдых' ? 'ACTIVE' : '',
+                )
+                .filter(Boolean)
+            : undefined,
+          instantConfirm: Boolean(args.instant_confirm),
           beachTypes: Array.isArray(args.beach_types)
             ? (args.beach_types as string[])
             : undefined,
@@ -624,15 +709,24 @@ async function runTool(
             minPrice != null ? { from: minPrice, to: maxPrice, currency: 'RUB' } : null,
           features_requested: args.features ?? [],
           features_filter_applied: result.stats?.featuresApplied ?? false,
+          // Filters the booking system applied to the WHOLE result set: every
+          // hotel in `hotels` satisfies each of them.
+          filters_applied: result.stats?.ltFiltersApplied?.length ? result.stats.ltFiltersApplied : undefined,
+          filters_not_available: result.stats?.ltFiltersUnavailable?.length
+            ? result.stats.ltFiltersUnavailable
+            : undefined,
+          hotels_matching_filters: result.stats?.ltHotelsCount,
           assumed_country: result.stats?.assumedCountry,
           features_matched: result.stats?.featuresMatched,
           hotels: picks.map((t) => ({ ...summarizeTourCard(t), pick_label: labels.get(t.id) })),
           note:
             picks.length === 0 && nameMiss
               ? `По направлению найдено ${result.stats?.raw ?? 0} отелей, но по названию совпадений нет. Скажите клиенту честно: направление в системе есть, а именно этот отель/бренд на эти даты не найден. Предложите проверить написание (латиницей) или показать похожие отели уровня без фильтра названия.`
+              : picks.length === 0 && result.stats?.ltFiltersApplied?.length
+              ? `Под все пожелания сразу (${result.stats.ltFiltersApplied.join('; ')}) на эти даты отелей нет. Скажите клиенту честно и по-человечески, без слов «фильтр» и «система» (например: «с аквапарком и на первой линии в Кемере на эти даты ничего нет — посмотрим вторую линию или Белек?»), либо сами ослабьте одно пожелание (курорт, звёзды, линия, даты ±3 дня) и повторите поиск.`
               : picks.length === 0
               ? 'Пустая выдача — ослабьте фильтры (даты ±3–5 дней, звёзды, бюджет, соседний курорт) и повторите поиск.'
-              : 'Карточки отелей УЖЕ показаны клиенту. ВАЖНО ПРО УДОБСТВА: если features_filter_applied = false, значит отфильтровать по запрошенным удобствам (аквапарк, a la carte и т.п.) НЕ удалось — НЕ говорите «все с аквапарком» и не пишите этого в комментариях. Чтобы проверить удобство конкретного отеля, вызовите get_hotel_info (там facilities и описание) или get_hotel_reviews. СЛЕДУЮЩИЙ ШАГ: annotate_hotels — по одной фразе на отель, ТОЛЬКО по фактам из выдачи (пляж, линия, питание, цена, рейтинг, pick_label). Потом текст: 1–2 фразы + один вопрос, без markdown и ссылок.',
+              : 'Карточки отелей УЖЕ показаны клиенту. ФИЛЬТРЫ: всё из filters_applied система применила ко всей выдаче — у КАЖДОГО показанного отеля это есть (например, «аквапарк» в filters_applied = аквапарк у всех отелей подтверждён), об этом можно говорить уверенно и писать в комментариях. hotels_matching_filters — сколько всего отелей подошло. filters_not_available — таких вариантов в этом поиске нет вообще: скажите об этом честно и предложите замену. Если features_filter_applied = false — часть удобств (анимация, спа, теннис и т.п.) проверить не удалось: не утверждайте их; проверить конкретный отель можно через get_hotel_info или get_hotel_reviews. НИКОГДА не говорите, что поиск по аквапарку, детскому клубу, бассейну и т.п. невозможен — он работает. ГОВОРИТЕ ПО-ЧЕЛОВЕЧЕСКИ: клиенту не нужны слова «фильтр», «система», «выдача», «применено» — скажите как турагент: «подобрала пятёрки в Анталье, где есть аквапарк, всего нашлось 37». СЛЕДУЮЩИЙ ШАГ: annotate_hotels — по одной фразе на отель, ТОЛЬКО по фактам из выдачи и filters_applied (пляж, линия, питание, удобства, рейтинг, pick_label). Потом текст: 1–2 фразы + один вопрос, без markdown и ссылок.',
         }
 
         // Remember this search so an identical repeat within the turn is served

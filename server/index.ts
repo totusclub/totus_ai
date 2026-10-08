@@ -35,6 +35,7 @@ import {
   type AuthPrincipal,
 } from './authUser.js'
 import { dbStatus, ensureChatSchema, isDbConfigured } from './db.js'
+import { webSearchStatus } from './webSearch.js'
 import { registerChatHistoryRoutes } from './chatHistory.js'
 import type { BookingRequest, SearchFilters, Tour } from './types.js'
 
@@ -114,6 +115,9 @@ app.get('/api/health', (_req, res) => {
     // online badge. Remove after kedam-WEB reinstalls the package (>= 1.0.11).
     kimi: llmStatus(),
     levelTravel: levelTravelStatus(),
+    webSearch: webSearchStatus(),
+    // Deployed version marker (STATUS D3): changes with every server release.
+    build: BUILD_TAG,
   })
 })
 

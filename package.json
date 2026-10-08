@@ -22,7 +22,8 @@
     "build:assistant-native": "npm run build -w @tosmedia/ai-assistant-native",
     "publish:assistant-native:git": "bash scripts/publish-ai-assistant-native-git.sh",
     "lint": "oxlint",
-    "typecheck:server": "tsc --noEmit -p tsconfig.server.json"
+    "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
+    "check": "tsx scripts/check-hotel-facts.ts && tsx scripts/check-human-tone.ts && tsx scripts/check-mila-flow.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.3",

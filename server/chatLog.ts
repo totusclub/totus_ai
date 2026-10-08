@@ -17,7 +17,7 @@ import path from 'node:path'
 const LOG_DIR =
   process.env.TOTUS_LOG_DIR?.trim() || path.join(os.homedir(), '.totus-chat-logs')
 
-export type LogKind = 'user' | 'assistant' | 'tool' | 'error'
+export type LogKind = 'user' | 'assistant' | 'tool' | 'error' | 'humanize'
 
 export interface LogEntry {
   ts: string
@@ -28,6 +28,11 @@ export interface LogEntry {
   args?: unknown
   summary?: string
   ms?: number
+  /** Level.Travel calls behind a tool step (kept here, not sent to the browser) */
+  api_calls?: string[]
+  /** humanize: machine phrases found in the reply and whether it was rewritten */
+  found?: string[]
+  changed?: boolean
 }
 
 function fileForToday() {

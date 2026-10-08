@@ -4,7 +4,8 @@
  *
  *   1. Level.Travel hotel reference (description + facilities)
  *   2. Level.Travel guest reviews
- *   3. Web search (Yandex), only if 1–2 gave nothing useful
+ *
+ * The model itself is DeepSeek only; no other AI / search providers.
  *
  * Every fact carries its source ONLY for the model's phrasing ("в отеле есть"
  * vs "гости хвалят"); the customer never hears where it came from.
@@ -16,9 +17,8 @@ import {
   type HotelInfo,
   type HotelReview,
 } from './levelTravel.js'
-import { isWebSearchEnabled as realWebEnabled, webSearch as realWebSearch, type WebResult } from './webSearch.js'
 
-export type FactSource = 'hotel' | 'guests' | 'web'
+export type FactSource = 'hotel' | 'guests'
 export type FactTone = 'positive' | 'negative' | 'neutral'
 export type Fact = { source: FactSource; text: string; tone: FactTone }
 
@@ -36,20 +36,16 @@ export interface FactsDeps {
   fetchHotelInfo: (hotelId: number) => Promise<HotelInfo | null>
   fetchHotelReviews: (hotelId: number, opts: { perPage?: number }) => Promise<{ reviews: HotelReview[] }>
   getCachedHotel: (hotelId: number) => HotelInfo | undefined
-  webSearch: (query: string, opts?: { limit?: number }) => Promise<WebResult[]>
-  isWebSearchEnabled: () => boolean
 }
 
 const realDeps: FactsDeps = {
   fetchHotelInfo: ltFetchHotelInfo,
   fetchHotelReviews: ltFetchHotelReviews,
   getCachedHotel: ltGetCachedHotel,
-  webSearch: realWebSearch,
-  isWebSearchEnabled: realWebEnabled,
 }
 let deps: FactsDeps = realDeps
 
-/** Tests replace Level.Travel / web with fakes. */
+/** Tests replace Level.Travel with fakes. */
 export function __setFactsDeps(d: Partial<FactsDeps> | null) {
   deps = d ? { ...realDeps, ...d } : realDeps
 }
@@ -215,42 +211,11 @@ function reviewFacts(reviews: HotelReview[], keywords: string[], max = 5) {
   return { facts, positive, negative, total }
 }
 
-/** Distinctive words of a hotel name, to make sure a web page is about IT. */
-function nameTokens(name: string) {
-  return norm(name)
-    .replace(/\(.*?\)/g, ' ')
-    .split(/[^a-zа-я0-9]+/)
-    .filter((w) => w.length >= 3 && !['hotel', 'resort', 'отель', 'the', 'spa', 'and', 'club', 'beach'].includes(w))
-}
-
-/** Step 3: web snippets that are about this hotel and this topic. */
-async function webFacts(info: HotelInfo | null | undefined, name: string, topic: string, keywords: string[]) {
-  if (!deps.isWebSearchEnabled() || !name) return []
-  const place = [info?.city, info?.country].filter(Boolean).join(' ')
-  const results = await deps.webSearch(`${name} ${place} ${topic} отзывы`.replace(/\s+/g, ' ').trim(), { limit: 6 })
-  const tokens = nameTokens(name)
-  const facts: Fact[] = []
-  for (const r of results) {
-    const about = `${r.title} ${r.snippet} ${r.url}`
-    const sameHotel = tokens.length === 0 || tokens.filter((t) => norm(about).includes(t)).length >= Math.min(2, tokens.length)
-    if (!sameHotel) continue
-    for (const s of matchingSentences(r.snippet.replace(/ … /g, '. '), keywords, 2)) {
-      if (!facts.some((f) => f.text === s)) facts.push({ source: 'web', text: s, tone: toneOf(s) })
-    }
-    if (facts.length >= 4) break
-  }
-  return facts
-}
-
-/**
- * Everything we can learn about one topic of one hotel, cascade order.
- * Web search runs only when the hotel card and reviews were not enough
- * (or always, with `forceWeb`).
- */
+/** Everything we can learn about one topic of one hotel, cascade order. */
 export async function researchHotel(
   hotelId: number,
   topic: string,
-  opts: { reviews?: number; forceWeb?: boolean; web?: boolean } = {},
+  opts: { reviews?: number } = {},
 ): Promise<HotelFacts> {
   const keywords = topicKeywords(topic)
   const info = await deps.fetchHotelInfo(hotelId).catch(() => deps.getCachedHotel(hotelId) ?? null)
@@ -265,15 +230,6 @@ export async function researchHotel(
     guests = { positive: r.positive, negative: r.negative, total: r.total }
   } catch {
     // reviews are optional — keep going
-  }
-
-  const enough = facts.filter((f) => f.source === 'hotel').length >= 1 || guests.total >= 2
-  if (opts.web !== false && (opts.forceWeb || !enough)) {
-    try {
-      facts.push(...(await webFacts(info, name, topic, keywords)))
-    } catch {
-      // web is the last resort; nothing to add
-    }
   }
 
   return { hotel_id: hotelId, name, topic, found: facts.length > 0, facts: facts.slice(0, 8), guests }
@@ -313,12 +269,12 @@ async function mapLimit<T, R>(items: T[], limit: number, deadline: number, fn: (
 /**
  * Check soft features (анимация, спа, теннис, a la carte …) for a list of
  * hotels, cheapest cascade first: reference for many, reviews for the
- * still-unconfirmed top, web for a handful. Bounded by `budgetMs`.
+ * still-unconfirmed top. Bounded by `budgetMs`.
  */
 export async function confirmFeatures(
   hotelIds: number[],
   features: string[],
-  opts: { referenceLimit?: number; reviewLimit?: number; webLimit?: number; budgetMs?: number } = {},
+  opts: { referenceLimit?: number; reviewLimit?: number; budgetMs?: number } = {},
 ): Promise<Map<number, FeatureConfirmation>> {
   const result = new Map<number, FeatureConfirmation>()
   const wanted = features.map((f) => f.trim()).filter(Boolean)
@@ -333,7 +289,6 @@ export async function confirmFeatures(
     }
     return e
   }
-  const missing = (id: number) => wanted.filter((f) => !result.get(id)?.confirmed.includes(f))
   const add = (id: number, feature: string, fact: Fact) => {
     const e = entry(id)
     if (!e.confirmed.includes(feature)) e.confirmed.push(feature)
@@ -369,21 +324,6 @@ export async function confirmFeatures(
     }
   })
 
-  // 3. Web — only a few hotels that are still missing something.
-  if (deps.isWebSearchEnabled()) {
-    const webIds = hotelIds
-      .slice(0, opts.reviewLimit ?? 15)
-      .filter((id) => missing(id).length)
-      .slice(0, opts.webLimit ?? 4)
-    await mapLimit(webIds, 4, deadline, async (id) => {
-      const info = deps.getCachedHotel(id)
-      for (const f of missing(id)) {
-        const facts = await webFacts(info, info?.name ?? '', f, kw.get(f)!)
-        const best = facts.find((x) => x.tone !== 'negative')
-        if (best) add(id, f, best)
-      }
-    })
-  }
   return result
 }
 

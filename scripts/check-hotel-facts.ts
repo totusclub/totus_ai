@@ -1,9 +1,13 @@
 /**
- * Facts cascade (server/hotelFacts.ts): Level.Travel card → guest reviews →
- * web, on fakes — no network, no keys.
+ * Facts cascade (server/hotelFacts.ts): Level.Travel card → guest reviews,
+ * on fakes — no network, no keys. Plus a guard: the only AI provider in the
+ * server is DeepSeek (no Yandex AI / search).
  * Run: npx tsx scripts/check-hotel-facts.ts
  */
 import assert from 'node:assert/strict'
+import { readdirSync, readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   __setFactsDeps,
   confirmFeatures,
@@ -13,7 +17,6 @@ import {
   topicKeywords,
 } from '../server/hotelFacts.ts'
 import type { HotelInfo, HotelReview } from '../server/levelTravel.ts'
-import { parseYandexXml } from '../server/webSearch.ts'
 
 let passed = 0
 async function check(name: string, fn: () => Promise<void> | void) {
@@ -44,27 +47,13 @@ const REVIEWS: Record<number, HotelReview[]> = {
   3: [{ text: 'Анимации нет совсем, вечером скучно.', rating: 6 }],
   4: [{ text: 'Номер чистый, спасибо горничной.', rating: 8 }],
 }
-let webCalls: string[] = []
-
-function install(web = true) {
-  webCalls = []
+function install() {
   __setFactsDeps({
     fetchHotelInfo: async (id) => HOTELS[id] ?? null,
     getCachedHotel: (id) => HOTELS[id],
     fetchHotelReviews: async (id) => {
       if (id === 5) throw new Error('Level.Travel 500')
       return { reviews: REVIEWS[id] ?? [] }
-    },
-    isWebSearchEnabled: () => web,
-    webSearch: async (q) => {
-      webCalls.push(q)
-      if (q.includes('Delta Palace')) {
-        return [
-          { title: 'Delta Palace — отзывы туристов', url: 'https://example.com/delta', snippet: 'В Delta Palace отличная анимация для детей и взрослых, по вечерам шоу.' },
-          { title: 'Другой отель Omega', url: 'https://example.com/omega', snippet: 'В Omega классная анимация.' },
-        ]
-      }
-      return []
     },
   })
 }
@@ -80,13 +69,12 @@ await check('ключевые слова: «классная анимация» 
   assert.equal(mentions('Хороший спа-центр', spa), true)
 })
 
-await check('факт из описания отеля — без отзывов и интернета', async () => {
+await check('факт из описания отеля', async () => {
   install()
   const r = await researchHotel(1, 'анимация')
   assert.equal(r.found, true)
   assert.equal(r.facts[0].source, 'hotel')
   assert.match(r.facts[0].text, /анимационная команда/)
-  assert.equal(webCalls.length, 0, 'интернет не нужен, когда отель сам это пишет')
 })
 
 await check('нет в описании → берём из отзывов гостей, с тоном', async () => {
@@ -96,30 +84,13 @@ await check('нет в описании → берём из отзывов го�
   assert.ok(r.facts.every((f) => f.source === 'guests'))
   assert.equal(r.guests.total, 2)
   assert.equal(r.guests.positive, 2)
-  assert.equal(webCalls.length, 0)
 })
 
-await check('нет ни в описании, ни в отзывах → интернет, только про этот отель', async () => {
-  install()
-  const r = await researchHotel(4, 'анимация')
-  assert.equal(r.found, true)
-  assert.equal(webCalls.length, 1)
-  assert.ok(r.facts.some((f) => f.source === 'web' && /Delta Palace/.test(f.text)))
-  assert.ok(!r.facts.some((f) => /Omega/.test(f.text)), 'страница про другой отель отброшена')
-})
-
-await check('ошибка отзывов и пустой интернет → found=false без исключения', async () => {
+await check('нет ни в описании, ни в отзывах (ошибка отзывов) → found=false без исключения', async () => {
   install()
   const r = await researchHotel(5, 'анимация')
   assert.equal(r.found, false)
   assert.deepEqual(r.facts, [])
-})
-
-await check('интернет выключен (нет ключей) → каскад заканчивается на отзывах', async () => {
-  install(false)
-  const r = await researchHotel(4, 'анимация')
-  assert.equal(webCalls.length, 0)
-  assert.equal(r.found, false)
 })
 
 await check('подбор «с анимацией»: подтверждённые отели, жалобы не считаются', async () => {
@@ -129,7 +100,7 @@ await check('подбор «с анимацией»: подтверждённы�
   assert.equal(ok(1), true, 'описание отеля')
   assert.equal(ok(2), true, 'отзывы гостей')
   assert.equal(ok(3), false, '«анимации нет, скучно» — не подтверждение')
-  assert.equal(ok(4), true, 'интернет')
+  assert.equal(ok(4), false, 'ни в описании, ни в отзывах — не подтверждён')
   assert.equal(ok(5), false)
   assert.equal(m.get(2)?.praise, 2)
   assert.equal(m.get(3)?.complaints, 1)
@@ -143,12 +114,20 @@ await check('комментарий к карточке: из похвалы г�
   assert.ok(c!.length <= 110)
 })
 
-await check('разбор ответа Яндекса: заголовок, адрес, фрагменты без <hlword>', () => {
-  const xml = '<yandexsearch><response><results><grouping><group><doc><url>https://a.ru/x</url><title>Rixos <hlword>Park</hlword> Belek</title><passages><passage>Анимация &amp; шоу</passage><passage>Дети довольны</passage></passages></doc></group></grouping></results></response></yandexsearch>'
-  const r = parseYandexXml(xml)
-  assert.equal(r.length, 1)
-  assert.equal(r[0].title, 'Rixos Park Belek')
-  assert.equal(r[0].snippet, 'Анимация & шоу … Дети довольны')
+await check('AI только DeepSeek: в сервере и .env.example нет Yandex AI / поиска', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+  const serverDir = path.join(root, 'server')
+  const files = [
+    ...readdirSync(serverDir).filter((f) => f.endsWith('.ts')).map((f) => path.join(serverDir, f)),
+    path.join(root, '.env.example'),
+  ]
+  for (const f of files) {
+    const text = readFileSync(f, 'utf8')
+    assert.ok(!/yandex|яндекс|searchapi|llm\.api\.cloud/i.test(text), `${path.basename(f)} упоминает Yandex`)
+  }
+  const llm = readFileSync(path.join(serverDir, 'llm.ts'), 'utf8')
+  assert.match(llm, /https:\/\/api\.deepseek\.com/)
+  assert.match(llm, /deepseek-v4-flash/)
 })
 
 __setFactsDeps(null)

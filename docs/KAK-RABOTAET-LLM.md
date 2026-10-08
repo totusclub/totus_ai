@@ -43,8 +43,7 @@ Level.Travel / кэш  →  карточки в WS (tours, rooms, …)
 | `server/assistant.ts` | Сессия WS, `seedRestoredSession` (restore после reconnect) |
 | `server/levelTravel.ts` | Поиск туров, офферы, ссылки `/hotel-details` |
 | `server/chatLog.ts` | Журнал диалогов / tool-вызовов |
-| `server/hotelFacts.ts` | Каскад фактов об отеле: справочник Level.Travel → отзывы → интернет |
-| `server/webSearch.ts` | Поиск в интернете (Yandex Search API), только фрагменты страниц |
+| `server/hotelFacts.ts` | Каскад фактов об отеле: справочник Level.Travel → отзывы гостей |
 | `server/humanTone.ts` | Страховка тона: ловит «система / сбой / информации нет» и переписывает ответ |
 
 ---
@@ -116,7 +115,7 @@ Level.Travel / кэш  →  карточки в WS (tours, rooms, …)
 | `get_hotel_info` | Карточка отеля из кэша/справочника | По `hotel_id` |
 | `get_hotel_offers` | Номера/цены по отелю | Поиск чата устарел / пуст / нет поиска → новый поиск по одному отелю; `all_rooms=true` — долго |
 | `get_hotel_reviews` | Отзывы гостей | Когда клиент спрашивает отзывы |
-| `research_hotel` | Любая тема по отелю (анимация, пляж, кухня, номера…) | Каскад: описание и удобства → отзывы → интернет; источник клиенту не называется |
+| `research_hotel` | Любая тема по отелю (анимация, пляж, кухня, номера…) | Каскад: описание и удобства → отзывы гостей; источник клиенту не называется |
 | `show_destinations` | Красивые карточки направлений | 2–4 пункта вместо текстового списка |
 
 Исполнение: `runTool(name, args, deps, session, ws, messageId)`.

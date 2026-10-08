@@ -21,7 +21,6 @@ process.env.DEEPSEEK_API_KEY = 'test-key'
 process.env.LLM_BASE_URL = 'https://llm.test/v1'
 process.env.TOTUS_LOG_DIR = mkdtempSync(path.join(tmpdir(), 'mila-check-'))
 process.env.TOTUS_DEPARTURE_CITIES = 'Москва'
-delete process.env.YANDEX_SEARCH_API_KEY
 delete process.env.TOTUS_BOOKING_URL_TEMPLATE
 
 type Json = Record<string, unknown>

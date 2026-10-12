@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { ensureChatSchema, getPool, isDbConfigured } from './db.js'
+import { maskPii } from './pii/detect.js'
 
 export type StoredChatMessage = {
   id: string
@@ -16,11 +17,13 @@ export type StoredChatSession = {
   messages: StoredChatMessage[]
 }
 
-function trimMessages(messages: StoredChatMessage[]): StoredChatMessage[] {
+export function trimMessages(messages: StoredChatMessage[]): StoredChatMessage[] {
   return (Array.isArray(messages) ? messages : []).slice(-80).map((m) => ({
     id: String(m.id || ''),
     role: m.role === 'assistant' || m.role === 'system' ? m.role : 'user',
-    content: typeof m.content === 'string' ? m.content : '',
+    // History is stored without personal data (owner's rule): older app
+    // versions still save a blocked message — only its masked copy is kept.
+    content: typeof m.content === 'string' ? maskPii(m.content) : '',
     timestamp: m.timestamp,
     metadata: m.metadata && typeof m.metadata === 'object' ? m.metadata : undefined,
   }))
@@ -90,7 +93,7 @@ export async function upsertUserChat(
   const id = String(chat.id || '').trim()
   if (!id) throw new Error('chat id required')
 
-  const title = (chat.title || 'Новый чат').slice(0, 255)
+  const title = maskPii(chat.title || 'Новый чат').slice(0, 255)
   const updatedAt = Number(chat.updatedAt) || Date.now()
   const messages = trimMessages(chat.messages || [])
 

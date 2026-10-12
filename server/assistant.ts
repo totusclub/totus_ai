@@ -3,6 +3,7 @@ import { logEvent } from './chatLog.js'
 import { randomUUID } from 'crypto'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import type { BookingRequest, BookingResponse, Tour } from './types.js'
+import { checkUserText, guardContext, maskForContext, PiiBlockedError, sendPiiWarning } from './pii/guard.js'
 
 export type BookingStep =
   | 'idle'
@@ -36,6 +37,8 @@ export interface Session {
   /** Last hotel cards sent to the chat (for annotate_hotels) */
   lastPicks?: (Tour & { pick_label?: string; comment?: string })[]
   lastPicksMessageId?: string
+  /** Previous customer message that passed the personal-data check */
+  lastUserText?: string
 }
 
 export interface AssistantDeps {
@@ -69,17 +72,23 @@ export function seedRestoredSession(
 ) {
   const history = Array.isArray(payload.messages) ? payload.messages : []
   session.llmMessages = [{ role: 'system', content: '' }]
+  // The client sends this history — it is checked like any message: personal
+  // data in it is masked before it becomes model context (owner's rule).
+  // Hotel names here come from the client too, so they do not whitelist
+  // anything — only hotels known to the server do.
+  const ctx = guardContext()
   for (const m of history.slice(-40)) {
     const role = m?.role === 'assistant' ? 'assistant' : 'user'
-    const content = typeof m?.content === 'string' ? m.content.trim() : ''
+    const content = typeof m?.content === 'string' ? maskForContext(m.content.trim(), ctx) : ''
     if (!content) continue
     session.history.push({ role, content })
     session.llmMessages.push({ role, content })
+    if (role === 'user') session.lastUserText = content
   }
 
   const hotels = (Array.isArray(payload.hotels) ? payload.hotels : [])
     .map((h) => {
-      const name = typeof h?.name === 'string' ? h.name.trim() : ''
+      const name = typeof h?.name === 'string' ? maskForContext(h.name.trim(), ctx) : ''
       const id = String(h?.id ?? '').replace(/^lt_/, '')
       if (!name) return null
       return /^\d+$/.test(id) ? `${name} (id ${id})` : name
@@ -257,12 +266,34 @@ export async function handleAssistantMessage(
   userText: string,
   deps: AssistantDeps,
 ) {
+  // Personal data never goes further: not to the model, not to the session,
+  // not to the journal. The customer is asked to remove it and resend.
+  const piiTypes = checkUserText(
+    userText,
+    guardContext({ hotelNames: session.lastPicks?.map((t) => t.name), previousUserText: session.lastUserText }),
+  )
+  if (piiTypes.length) {
+    logEvent({ session: session.logId ?? 'unknown', kind: 'pii_blocked', types: piiTypes })
+    await sendPiiWarning(ws, piiTypes, randomUUID())
+    return
+  }
+  session.lastUserText = userText
+
   const { isLlmEnabled, handleLlmMessage } = await import('./llm.js')
   if (isLlmEnabled()) {
     try {
       await handleLlmMessage(ws, session, userText, deps)
       return
     } catch (err) {
+      if (err instanceof PiiBlockedError) {
+        // The request check found personal data the entry check missed:
+        // nothing was sent; drop the message and warn the customer.
+        if (session.history.at(-1)?.role === 'user') session.history.pop()
+        if (session.llmMessages?.at(-1)?.role === 'user') session.llmMessages.pop()
+        logEvent({ session: session.logId ?? 'unknown', kind: 'pii_blocked', types: err.types, stage: 'request' })
+        await sendPiiWarning(ws, err.types, randomUUID())
+        return
+      }
       // DO NOT silently fall back to the scripted bot: that hid the real
       // failure and made it look like "the assistant stopped finding tours",
       // while the actual cause (LLM/API error) was only visible in the

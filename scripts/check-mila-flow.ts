@@ -42,6 +42,9 @@ const DESCRIPTIONS: Record<number, string> = {
   9005: 'Анимация для детей и взрослых.',
 }
 const REVIEWS: Record<number, Json[]> = {
+  [RIXOS]: [
+    { text: 'Спасибо аниматору Саше и Ольге на ресепшене! Звоните им +90 532 123 45 67', author: 'Ирина Петрова', rating: 10 },
+  ],
   9003: [
     { text: 'Анимация супер, аниматоры весёлые, каждый вечер шоу!', rating: 10 },
     { pros: 'Отличная анимация', text: 'Хороший отель', rating: 9 },
@@ -104,7 +107,9 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
 }) as typeof fetch
 
 const { handleLlmMessage } = await import('../server/llm.ts')
-const { createSession } = await import('../server/assistant.ts')
+const { createSession, handleAssistantMessage, seedRestoredSession } = await import('../server/assistant.ts')
+const { trimMessages } = await import('../server/chatHistory.ts')
+const { logEvent, readRecentLog } = await import('../server/chatLog.ts')
 
 function fakeWs() {
   const events: Json[] = []
@@ -195,6 +200,90 @@ await check('ответ «как программа» переписываетс
   const sent = text(a.events)
   assert.equal(sent, 'На эти даты в Rixos Park Belek мест не вижу — сдвинем вылет на пару дней?')
   assert.ok(a.events.some((e) => e.type === 'done'))
+})
+
+// ---------------------------------------------------------------------------
+// Personal data (owner's rule 12.10.2026): nothing reaches DeepSeek.
+// ---------------------------------------------------------------------------
+const deps = { filterTours: async () => [], getTour: () => undefined, createBooking: () => ({}) } as never
+const sentToModel = () => JSON.stringify(llmBodies)
+
+await check('сообщение с телефоном и именем не уходит в DeepSeek — клиенту предупреждение', async () => {
+  const s = createSession()
+  const before = llmBodies.length
+  script = []
+  const a = fakeWs()
+  await handleAssistantMessage(a.ws as never, s, 'Меня зовут Анна Смирнова, мой номер +7 916 123-45-67, хотим в Белек', deps)
+  assert.equal(llmBodies.length, before, 'модель не должна вызываться')
+  assert.deepEqual((a.events.find((e) => e.type === 'pii_blocked') as Json)?.types, ['name', 'phone'])
+  const warning = text(a.events)
+  assert.match(warning, /уберите из сообщения личные данные — имя или фамилию и номер телефона — и отправьте его ещё раз/)
+  assert.ok(!/Анна|916/.test(warning), 'значение в предупреждении не повторяется')
+  assert.ok(a.events.some((e) => e.type === 'done'))
+  assert.equal(s.history.length, 0, 'в сессию не попало')
+  const log = JSON.stringify(readRecentLog(50))
+  assert.ok(log.includes('pii_blocked') && !/Смирнова|916/.test(log), 'в журнале только тип')
+})
+
+await check('после исправления то же сообщение без данных уходит как обычно', async () => {
+  const s = createSession()
+  script = [{ content: 'Подобрала варианты в Белеке.' }]
+  const a = fakeWs()
+  await handleAssistantMessage(a.ws as never, s, 'Хотим в Белек, двое взрослых', deps)
+  assert.equal(text(a.events), 'Подобрала варианты в Белеке.')
+  assert.ok(!a.events.some((e) => e.type === 'pii_blocked'))
+})
+
+await check('restore: паспорт, телефон и имя из истории клиента маскируются до модели', async () => {
+  const s = createSession()
+  seedRestoredSession(s, {
+    messages: [
+      { role: 'user', content: 'паспорт 45 12 345678, звоните 89161234567' },
+      { role: 'assistant', content: 'Сергей, подобрала вам отели' },
+    ],
+    hotels: [{ id: RIXOS, name: 'Rixos Park Belek' }, { id: 1, name: 'Иван Петров +79161234567' }],
+  })
+  script = [{ content: 'Пляж песчаный.' }]
+  const before = llmBodies.length
+  await handleAssistantMessage(fakeWs().ws as never, s, 'а пляж там какой?', deps)
+  const body = JSON.stringify(llmBodies.slice(before))
+  const leak = body.match(/45 12 345678|89161234567|79161234567|Сергей|Петров/)
+  assert.ok(!leak, `утечка: ${leak?.[0]} … ${body.slice(Math.max(0, (leak?.index ?? 0) - 200), (leak?.index ?? 0) + 60)}`)
+  assert.ok(body.includes('[скрыто: паспорт]') && body.includes('Rixos Park Belek'))
+})
+
+await check('страховка перед DeepSeek: данные в контексте сессии — запрос не отправляется', async () => {
+  const s = createSession()
+  s.llmMessages = [{ role: 'system', content: '' }, { role: 'user', content: 'мой e-mail anna@mail.ru' }] as never
+  const before = llmBodies.length
+  script = [{ content: 'не должно дойти' }]
+  const a = fakeWs()
+  await handleAssistantMessage(a.ws as never, s, 'что с погодой в ноябре?', deps)
+  assert.equal(llmBodies.length, before)
+  assert.ok(a.events.some((e) => e.type === 'pii_blocked'))
+  script = []
+})
+
+await check('отзывы: имена сотрудников, телефон и автор не уходят в модель', async () => {
+  const s = createSession()
+  script = [
+    { tool: { name: 'get_hotel_reviews', args: { hotel_id: RIXOS } } },
+    { content: 'Гости хвалят аниматоров.' },
+  ]
+  await handleLlmMessage(fakeWs().ws as never, s, 'что пишут гости про анимацию?', deps)
+  const r = JSON.stringify(toolResult('get_hotel_reviews'))
+  assert.ok(!/Саше|Ольге|532 123|Ирина|Петрова|author/.test(r), r)
+  assert.ok(r.includes('[скрыто: имя]') && r.includes('[скрыто: телефон]'))
+})
+
+await check('история чатов (MySQL) и журнал — только с маскированными данными', async () => {
+  const saved = trimMessages([{ id: '1', role: 'user', content: 'карта 2202 2000 0000 0008, ФИО Сидоров Пётр' }])
+  assert.equal(saved[0].content, 'карта [скрыто: карта], ФИО [скрыто: имя] [скрыто: имя]')
+  logEvent({ session: 'pii-check', kind: 'assistant', text: 'Иван, ваш номер 89161234567', args: { q: 'anna@mail.ru' } })
+  const entry = readRecentLog(500, 'pii-check').at(-1)!
+  assert.equal(entry.text, '[скрыто: имя], ваш номер [скрыто: телефон]')
+  assert.deepEqual(entry.args, { q: '[скрыто: e-mail]' })
+  assert.ok(!sentToModel().includes('anna@mail.ru'))
 })
 
 console.log(`check-mila-flow: ${passed} passed`)

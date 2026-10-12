@@ -1,4 +1,5 @@
 import type { Tour } from './types.js'
+import { maskPii } from './pii/detect.js'
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -37,7 +38,7 @@ function appendAflt(url: string) {
   }
 }
 
-export const BUILD_TAG = 'v39-facts-cascade · 2026-10-08'
+export const BUILD_TAG = 'v40-pii-guard · 2026-10-12'
 
 export function isLevelTravelEnabled() {
   const key = process.env.LEVEL_TRAVEL_API_KEY?.trim()
@@ -2199,11 +2200,43 @@ export async function hotelPageUrl(hotelId: number): Promise<string | undefined>
   return buildTotusHotelUrl({ hotelId, requestId: ctx?.requestId, params })
 }
 
+/**
+ * Words of countries, resorts and departure cities known to the booking
+ * system — for the personal-data guard: «Лара», «Владимир», «София» there are
+ * places, not people.
+ */
+export function knownPlaceWords(): string[] {
+  const out = new Set<string>()
+  const add = (s?: string) => {
+    for (const w of String(s ?? '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я]+/)) if (w.length >= 3) out.add(w)
+  }
+  for (const k of Object.keys(DESTINATION_MAP)) add(k)
+  for (const k of countriesFromApi.keys()) add(k)
+  for (const k of Object.keys(FROM_CITY_MAP)) add(k)
+  for (const k of departuresFromApi.keys()) add(k)
+  for (const [k, v] of Object.entries(REGION_ALIASES)) {
+    add(k)
+    add(v)
+  }
+  return [...out]
+}
+
+let hotelWordsCache: { size: number; words: Set<string> } | null = null
+/** Words of hotel names seen by this server — «Ali Bey», «Kaya Palazzo». */
+export function cachedHotelWords(): Set<string> {
+  if (hotelWordsCache && hotelWordsCache.size === hotelCache.size) return hotelWordsCache.words
+  const words = new Set<string>()
+  for (const h of hotelCache.values()) {
+    for (const w of h.name.toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я]+/)) if (w.length >= 3) words.add(w)
+  }
+  hotelWordsCache = { size: hotelCache.size, words }
+  return words
+}
+
 export interface HotelReview {
   rating?: number
   title?: string
   text: string
-  author?: string
   date?: string
   pros?: string
   cons?: string
@@ -2247,22 +2280,16 @@ export async function fetchHotelReviews(
     const pros = pickString(rec.pros, rec.advantages, rec.positive, rec.plus)
     const cons = pickString(rec.cons, rec.disadvantages, rec.negative, rec.minus)
     if (!text && !pros && !cons) continue
-    // Only a first name is kept — no need to carry more personal data around.
-    const rawAuthor = pickString(
-      asRecord(rec.author)?.name,
-      typeof rec.author === 'string' ? rec.author : undefined,
-      rec.user_name,
-      rec.username,
-      rec.name,
-    )
+    // No personal data goes on to the model (owner's rule): the author is
+    // dropped, names / phones inside the texts are masked.
+    const title = pickString(rec.title, rec.header)
     reviews.push({
       rating: pickNumber(rec.rating, rec.mark, rec.score) || undefined,
-      title: pickString(rec.title, rec.header) || undefined,
-      text: (text || '').slice(0, 700),
-      author: rawAuthor ? rawAuthor.split(/\s+/)[0] : undefined,
+      title: title ? maskPii(title) : undefined,
+      text: maskPii((text || '').slice(0, 700)),
       date: pickString(rec.date, rec.created_at, rec.published_at) || undefined,
-      pros: pros ? pros.slice(0, 300) : undefined,
-      cons: cons ? cons.slice(0, 300) : undefined,
+      pros: pros ? maskPii(pros.slice(0, 300)) : undefined,
+      cons: cons ? maskPii(cons.slice(0, 300)) : undefined,
     })
   }
   const total = pickNumber(root.total, root.total_count, root.count) || undefined
@@ -2380,7 +2407,7 @@ export async function fetchHotelInfo(hotelId: number): Promise<HotelInfo | null>
         description: '',
         images: [],
       }),
-      description: description || cached?.description || '',
+      description: maskPii(description || cached?.description || ''),
       facilities: facilities.length ? facilities : cached?.facilities,
       rating,
       review_count: reviewCount,

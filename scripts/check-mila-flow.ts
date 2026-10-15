@@ -252,6 +252,26 @@ await check('restore: паспорт, телефон и имя из истори
   assert.ok(body.includes('[скрыто: паспорт]') && body.includes('Rixos Park Belek'))
 })
 
+await check('restore заблокированного раньше сообщения не блокирует следующие вопросы', async () => {
+  // Old app versions keep the blocked bubble and send it back in `restore`.
+  const s = createSession()
+  seedRestoredSession(s, {
+    messages: [
+      { role: 'user', content: 'Меня зовут Анна, телефон 89161234567, хотим в Белек' },
+      { role: 'assistant', content: 'Пожалуйста, уберите из сообщения личные данные' },
+    ],
+    hotels: [],
+  })
+  script = [{ content: 'Пляж песчаный.' }]
+  const before = llmBodies.length
+  const a = fakeWs()
+  await handleAssistantMessage(a.ws as never, s, 'А пляж там какой?', deps)
+  assert.equal(llmBodies.length, before + 1, 'вопрос должен уйти в модель')
+  assert.ok(!a.events.some((e) => e.type === 'pii_blocked'))
+  const body = JSON.stringify(llmBodies.at(-1))
+  assert.ok(body.includes('Меня зовут [скрыто: имя], телефон [скрыто: телефон]') && !/Анна|89161234567/.test(body))
+})
+
 await check('страховка перед DeepSeek: данные в контексте сессии — запрос не отправляется', async () => {
   const s = createSession()
   s.llmMessages = [{ role: 'system', content: '' }, { role: 'user', content: 'мой e-mail anna@mail.ru' }] as never

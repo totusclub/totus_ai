@@ -12,7 +12,7 @@
  */
 import { AGENT_NAMES, LATIN_NAMES, NAME_FORMS } from './names.js'
 
-export const PII_RULES_VERSION = 'pii-1 · 2026-10-12'
+export const PII_RULES_VERSION = 'pii-2 · 2026-10-15'
 
 export type PiiType =
   | 'name'
@@ -142,8 +142,10 @@ export function normalize(text: string): Norm {
       else if (lat > cyr && /[а-я]/.test(c)) chars[pos] = CYR_TO_LAT[c] ?? c
     }
   }
-  // Our own placeholders «[скрыто: …]» are not data — masking is idempotent.
-  const a = chars.join('').replace(/\[скрыто: [^\]]{1,20}\]/g, (m) => ' '.repeat(m.length))
+  // Our own placeholders «[скрыто: …]» are not data. They become «§§§» — a
+  // barrier: «меня зовут [скрыто: имя], телефон …» must not read «телефон»
+  // as the name (that blocked every next message after a restore).
+  const a = chars.join('').replace(/\[скрыто: [^\]]{1,20}\]/g, (m) => '§'.repeat(m.length))
   return { a, map, upper }
 }
 
@@ -584,7 +586,8 @@ function detectNames(n: Norm, ctx: PiiContext, out: Array<{ type: PiiType; s: nu
       for (let i = 0; i < toks.length && taken < 3; i++) {
         const t = toks[i]
         if (t.s < from) continue
-        if (/[.!?;\n]/.test(n.a.slice(from, t.s)) || (taken > 0 && /,/.test(n.a.slice(toks[i - 1].e, t.s)))) break
+        // Stop at a sentence end, a comma or a masked placeholder.
+        if (/[.!?;\n§,]/.test(n.a.slice(taken > 0 ? toks[i - 1].e : from, t.s))) break
         if (STOP.has(t.w)) {
           if (taken === 0) break
           break

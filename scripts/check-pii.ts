@@ -223,6 +223,19 @@ assert.equal(maskPii(masked), masked)
 assert.deepEqual(piiTypes(findPii('Анна, +79161234567')), ['name', 'phone'])
 assert.deepEqual(maskDeep({ a: ['пишите ivan@mail.ru'], n: 5 }), { a: ['пишите [скрыто: e-mail]'], n: 5 })
 
+// Masked text is clean: after a restore the masked history is checked again
+// before every request — a leftover «finding» blocked the whole chat.
+for (const [text] of POSITIVE) {
+  const m = maskPii(text)
+  const again = findPii(m)
+  if (again.length) {
+    failures++
+    console.log(`  ✗ после маскирования снова найдено: «${m}» → ${again.map((f) => `${f.type}:«${m.slice(f.start, f.end)}»`).join(', ')}`)
+  }
+}
+assert.deepEqual(findPii('Меня зовут [скрыто: имя], телефон [скрыто: телефон], хотим в Белек'), [])
+assert.deepEqual(findPii('ФИО: [скрыто: имя] [скрыто: имя], хотим в Турцию'), [])
+
 // A number split over two messages.
 assert.ok(findPii('123 45 67', { previousUserText: 'мой номер +7 916' }).some((f) => f.type === 'phone'))
 // Places from the booking system are not names.

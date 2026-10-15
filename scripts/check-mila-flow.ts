@@ -1,0 +1,200 @@
+/**
+ * End-to-end dialogue on fakes: the real server/llm.ts + server/levelTravel.ts,
+ * with Level.Travel and the model replaced by a fake `fetch`. No keys needed.
+ *
+ *  1. Screenshot 08.10.2026: «риксос парк белек мне подходит — поможешь
+ *     выбрать номер?» after the chat's search expired → rooms are shown,
+ *     the model never gets an error to apologise for.
+ *  2. «Хорошие отели с классной анимацией» → hotels guests praise for the
+ *     animation come first, with confirmed_features for the model.
+ *  3. A reply that still sounds like a program is rewritten before sending.
+ *
+ * Run: npx tsx scripts/check-mila-flow.ts
+ */
+import assert from 'node:assert/strict'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
+process.env.LEVEL_TRAVEL_API_KEY = 'test-key-0123456789'
+process.env.DEEPSEEK_API_KEY = 'test-key'
+process.env.LLM_BASE_URL = 'https://llm.test/v1'
+process.env.TOTUS_LOG_DIR = mkdtempSync(path.join(tmpdir(), 'mila-check-'))
+process.env.TOTUS_DEPARTURE_CITIES = 'Москва'
+delete process.env.TOTUS_BOOKING_URL_TEMPLATE
+
+type Json = Record<string, unknown>
+type Completion = { content?: string; tool?: { name: string; args: Json } }
+
+const RIXOS = 9001
+const HOTELS: Json[] = [
+  { id: RIXOS, name: 'Rixos Park Belek', city: 'Белек', country: 'Турция', stars: 5, rating: 9.2 },
+  { id: 9002, name: 'Alpha Family Resort', city: 'Белек', country: 'Турция', stars: 5, rating: 9.0 },
+  { id: 9003, name: 'Beta Garden Hotel', city: 'Белек', country: 'Турция', stars: 5, rating: 8.6 },
+  { id: 9004, name: 'Gamma Quiet Hotel', city: 'Белек', country: 'Турция', stars: 5, rating: 8.8 },
+  { id: 9005, name: 'Delta Club', city: 'Белек', country: 'Турция', stars: 5, rating: 8.4 },
+]
+const DESCRIPTIONS: Record<number, string> = {
+  [RIXOS]: 'Семейный отель. Номера: Deluxe Room, Family Room с двумя спальнями.',
+  9002: 'Большой аквапарк. Анимационная команда: вечерние шоу и мини-диско.',
+  9003: 'Сад и бассейн.',
+  9004: 'Спокойный отель для отдыха.',
+  9005: 'Анимация для детей и взрослых.',
+}
+const REVIEWS: Record<number, Json[]> = {
+  9003: [
+    { text: 'Анимация супер, аниматоры весёлые, каждый вечер шоу!', rating: 10 },
+    { pros: 'Отличная анимация', text: 'Хороший отель', rating: 9 },
+    { text: 'Аниматоры молодцы, дети в восторге', rating: 10 },
+  ],
+  9004: [{ text: 'Анимации нет совсем, вечером скучно.', rating: 6 }],
+}
+
+const ltCalls: string[] = []
+const llmBodies: Json[] = []
+let script: Completion[] = []
+let enqueued = 0
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+}
+
+globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+  const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
+  if (url.host === 'llm.test') {
+    const body = JSON.parse(String(init?.body)) as Json
+    llmBodies.push(body)
+    const isHumanize = !body.tools
+    const step = isHumanize
+      ? { content: 'На эти даты в Rixos Park Belek мест не вижу — сдвинем вылет на пару дней?' }
+      : script.shift()
+    assert.ok(step, 'модель вызвана больше раз, чем в сценарии')
+    const message = step.tool
+      ? { role: 'assistant', content: null, tool_calls: [{ id: `call_${llmBodies.length}`, type: 'function', function: { name: step.tool.name, arguments: JSON.stringify(step.tool.args) } }] }
+      : { role: 'assistant', content: step.content }
+    return json({ id: 'x', object: 'chat.completion', created: 0, model: 'm', choices: [{ index: 0, message, finish_reason: step.tool ? 'tool_calls' : 'stop' }] })
+  }
+  ltCalls.push(`${url.pathname}?${url.searchParams.toString()}`)
+  const p = url.pathname
+  const q = url.searchParams
+  if (p === '/search/enqueue') {
+    enqueued++
+    return json({ success: true, request_id: q.get('hotel_ids') ? `rid-hotel-${q.get('hotel_ids')}` : `rid-search-${enqueued}` })
+  }
+  if (p === '/search/status') return json({ success: true, completeness: 100, status: { 1: 'completed' } })
+  if (p === '/search/get_grouped_hotels') {
+    return json({ success: true, hotels_count: HOTELS.length, filters: {}, hotels: HOTELS.map((h, i) => ({ hotel: h, min_price: 300000 + i * 10000, pansion_prices: { UAI: 300000 + i * 10000 } })) })
+  }
+  if (p === '/search/get_hotel_offers') {
+    // The chat's search has expired — exactly what the owner hit.
+    if (!String(q.get('request_id')).startsWith('rid-hotel-')) return json({ success: false, message: 'Request not found' }, 404)
+    return json({ success: true, hotel_offers: [
+      { id: 't1', hotel_id: RIXOS, room_name: 'Family Room', pansion: { name: 'UAI' }, price: 512000 },
+      { id: 't2', hotel_id: RIXOS, room_name: 'Deluxe Room', pansion: { name: 'UAI' }, price: 471000 },
+    ] })
+  }
+  if (p === '/references/hotels') {
+    const id = Number(q.get('hotel_ids'))
+    const h = HOTELS.find((x) => x.id === id)
+    return json({ hotels: h ? [{ hotel: { ...h, description: DESCRIPTIONS[id] } }] : [] })
+  }
+  const rev = p.match(/^\/references\/hotel_reviews\/(\d+)$/)
+  if (rev) return json({ hotel_reviews: REVIEWS[Number(rev[1])] ?? [], total: (REVIEWS[Number(rev[1])] ?? []).length })
+  return json({ success: false, message: `unexpected ${p}` }, 404)
+}) as typeof fetch
+
+const { handleLlmMessage } = await import('../server/llm.ts')
+const { createSession } = await import('../server/assistant.ts')
+
+function fakeWs() {
+  const events: Json[] = []
+  return { events, ws: { readyState: 1, OPEN: 1, send: (d: string) => events.push(JSON.parse(d)) } }
+}
+const text = (events: Json[]) => events.filter((e) => e.type === 'token').map((e) => e.content).join('')
+const toolResult = (name: string) => {
+  for (let i = llmBodies.length - 1; i >= 0; i--) {
+    const msgs = llmBodies[i].messages as Json[]
+    const callIds = new Set(
+      msgs.flatMap((m) => ((m.tool_calls as Json[] | undefined) ?? []).filter((c) => (c.function as Json).name === name).map((c) => c.id)),
+    )
+    const res = [...msgs].reverse().find((m) => m.role === 'tool' && callIds.has(m.tool_call_id))
+    if (res) return JSON.parse(String(res.content)) as Json
+  }
+  return undefined
+}
+
+let passed = 0
+async function check(name: string, fn: () => Promise<void>) {
+  await fn()
+  passed++
+  console.log(`  ✓ ${name}`)
+}
+
+console.log('check-mila-flow')
+const session = createSession()
+
+await check('сценарий со скриншота: номера Rixos Park Belek после устаревшего поиска', async () => {
+  script = [
+    { tool: { name: 'search_tours', args: { destination: 'Турция', resorts: ['Белек'], start_date_from: '2026-11-01', adults: 2, kids_ages: [5, 9], stars_min: 5 } } },
+    { content: 'Подобрала пятёрки в Белеке для вашей семьи. Какой отель ближе?' },
+  ]
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, session, 'Белек в ноябре, двое взрослых и двое детей 5 и 9 лет, пятёрка', {} as never)
+  assert.ok(a.events.some((e) => e.type === 'tours'), JSON.stringify(toolResult('search_tours')).slice(0, 400) + ' | ' + ltCalls.slice(0,6).join(' ; '))
+
+  script = [
+    { tool: { name: 'get_hotel_offers', args: { hotel_id: RIXOS } } },
+    { content: 'Вчетвером удобнее всего Family Room — две спальни. Посмотрим его?' },
+  ]
+  const b = fakeWs()
+  await handleLlmMessage(b.ws as never, session, 'риксос парк белек мне подходит - поможешь выбрать номер?', {} as never)
+  const result = toolResult('get_hotel_offers')!
+  assert.equal(result.error, undefined, `модель получила ошибку: ${JSON.stringify(result).slice(0, 200)}`)
+  assert.equal(result.rooms_count, 2)
+  const rooms = b.events.find((e) => e.type === 'rooms') as Json | undefined
+  assert.ok(rooms, 'карточки номеров не отправлены в чат')
+  assert.equal((rooms.rooms as Json[]).length, 2)
+  // The retry is a search for this very hotel, with the family from the chat.
+  assert.ok(ltCalls.some((c) => c.startsWith('/search/enqueue?') && c.includes(`hotel_ids=${RIXOS}`) && c.includes('kids_ages=5%2C9')))
+  const link = String(((rooms.rooms as Json[])[0]).booking_url ?? '')
+  assert.ok(link.includes(`request_id=rid-hotel-${RIXOS}`), `кнопка бронирования ведёт на устаревший поиск: ${link}`)
+})
+
+await check('в браузер не уходят адреса поставщика и сырые ошибки', async () => {
+  const a = fakeWs()
+  script = [{ tool: { name: 'get_hotel_offers', args: { hotel_id: RIXOS } } }, { content: 'Готово.' }]
+  await handleLlmMessage(a.ws as never, session, 'покажи номера ещё раз', {} as never)
+  const wire = JSON.stringify(a.events)
+  assert.ok(!/level\.travel|api_calls|Request not found/i.test(wire), wire.slice(0, 300))
+})
+
+await check('«хорошие отели с классной анимацией»: сначала те, что хвалят гости', async () => {
+  script = [
+    { tool: { name: 'search_tours', args: { destination: 'Турция', resorts: ['Белек'], start_date_from: '2026-11-01', adults: 2, stars_min: 5, features: ['анимация'], sort_by: 'rating' } } },
+    { content: 'Подобрала пятёрки в Белеке, где с анимацией всё отлично.' },
+  ]
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, createSession(), 'нужны хорошие отели с классной анимацией в Белеке', {} as never)
+  const r = toolResult('search_tours')!
+  const hotels = r.hotels as Json[]
+  const names = hotels.map((h) => h.name)
+  assert.equal(names[0], 'Beta Garden Hotel', `первым должен быть отель, который хвалят гости: ${names.join(', ')}`)
+  assert.ok(!names.includes('Gamma Quiet Hotel'), '«анимации нет» — такой отель не показываем')
+  for (const h of hotels) assert.deepEqual(h.confirmed_features, ['анимация'], String(h.name))
+  assert.equal(r.features_filter_applied, true)
+  const cards = (a.events.find((e) => e.type === 'tours') as Json).tours as Json[]
+  assert.match(String(cards[0].comment), /^Гости: /)
+})
+
+await check('ответ «как программа» переписывается до отправки клиенту', async () => {
+  script = [
+    { content: 'Прошу прощения, сейчас система не отдаёт варианты по этому отелю — похоже, временный сбой на стороне поиска. Давайте попробуем через минуту, я перезапущу подбор.' },
+  ]
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, createSession(), 'а номера?', {} as never)
+  const sent = text(a.events)
+  assert.equal(sent, 'На эти даты в Rixos Park Belek мест не вижу — сдвинем вылет на пару дней?')
+  assert.ok(a.events.some((e) => e.type === 'done'))
+})
+
+console.log(`check-mila-flow: ${passed} passed`)

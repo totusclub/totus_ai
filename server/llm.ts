@@ -22,14 +22,18 @@ import {
   getCachedTour,
   buildBookingUrl,
   findDestinationImage,
-  getHotelOffers,
+  getHotelOffersResilient,
   getHotelSearchContext,
   groupOffersByRoom,
+  hotelPageUrl,
   looksLikeHotelName,
   resolveFromCity,
   searchLevelTravelPackages,
+  splitFeatures,
   type HotelInfo,
 } from './levelTravel.js'
+import { confirmFeatures, evidenceComment, researchHotel, type FeatureConfirmation } from './hotelFacts.js'
+import { findMachineTalk, humanizeReply } from './humanTone.js'
 
 export const TOUR_TOOLS: ChatCompletionTool[] = [
   {
@@ -157,7 +161,7 @@ export const TOUR_TOOLS: ChatCompletionTool[] = [
               ],
             },
             description:
-              'Удобства отеля и перелёта. Всё от «аквапарк» до «прямой перелёт» система фильтрует сама по всей выдаче (это фильтры сайта); анимация, крытый бассейн, спа, фитнес, теннис, семейные номера проверяются только по описанию отеля.',
+              'Удобства отеля и перелёта. Всё от «аквапарк» до «прямой перелёт» отбирается по всем отелям направления. Анимация, крытый бассейн, спа, фитнес, теннис, семейные номера проверяются по описанию каждого отеля и отзывам гостей: в ответе у отеля будет confirmed_features.',
           },
           hotel_name: {
             type: 'string',
@@ -240,6 +244,25 @@ export const TOUR_TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'research_hotel',
+      description:
+        'Всё, что известно о конкретной стороне отеля: анимация, аквапарк, детский клуб, пляж и море, кухня и рестораны, номера, территория, спа, шум, персонал, трансфер и т.п. Сам проверяет описание и удобства отеля, затем отзывы гостей, и возвращает готовые факты. Вызывай на ЛЮБОЙ вопрос о конкретном отеле, на который нет ответа в уже полученных данных.',
+      parameters: {
+        type: 'object',
+        required: ['hotel_id', 'topic'],
+        properties: {
+          hotel_id: { type: 'integer' },
+          topic: {
+            type: 'string',
+            description: 'О чём вопрос, 1–3 слова по-русски: «анимация», «пляж», «детский клуб», «рестораны a la carte», «номера для семьи»',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'annotate_hotels',
       description:
         'Добавить в УЖЕ показанные карточки отелей персональный комментарий (одна фраза на отель: чем он хорош именно под запрос клиента). Вызывать СРАЗУ после search_tours.',
@@ -256,7 +279,7 @@ export const TOUR_TOOLS: ChatCompletionTool[] = [
                 hotel_id: { type: 'integer' },
                 comment: {
                   type: 'string',
-                  description: 'До 90 знаков, без markdown. ТОЛЬКО факты из выдачи поиска или из get_hotel_info по этому отелю. ЗАПРЕЩЕНО: любые цены и суммы (они уже есть в карточке) и коды питания (UAI, AI, HB, BB) — пиши «Ультра всё включено», «Всё включено», «Полупансион», «Завтраки». Запрещено упоминать удобства (аквапарк, a la carte, спа), если они не подтверждены данными. Пример: «Песчаный пляж, 1-я линия, ультра всё включено»',
+                  description: 'До 90 знаков, без markdown. ТОЛЬКО факты из выдачи поиска, confirmed_features/evidence, get_hotel_info или research_hotel по этому отелю. ЗАПРЕЩЕНО: любые цены и суммы (они уже есть в карточке) и коды питания (UAI, AI, HB, BB) — пиши «Ультра всё включено», «Всё включено», «Полупансион», «Завтраки». Запрещено упоминать удобства (аквапарк, a la carte, спа), если они не подтверждены данными. Пример: «Песчаный пляж, 1-я линия, ультра всё включено»',
                 },
               },
             },
@@ -413,6 +436,55 @@ function pickKayakStyle(tours: Tour[], limit: number): { picks: Tour[]; labels: 
   return { picks: picks.slice(0, limit), labels }
 }
 
+/**
+ * Top for «отели с классной анимацией»: the hotel guests praise most first,
+ * then the usual diverse picks among confirmed hotels, then the rest.
+ */
+function pickSoftFeatureTop(
+  pool: Tour[],
+  limit: number,
+  confirmedCount: number,
+  praiseOf: (t: Tour) => number,
+) {
+  const confirmed = pool.slice(0, confirmedCount)
+  const rest = pool.slice(confirmedCount)
+  const first = confirmed[0]
+  const praised = first && praiseOf(first) > 0
+  const kayak = praised
+    ? pickKayakStyle(confirmed.slice(1), Math.max(limit - 1, 0))
+    : pickKayakStyle(confirmed, limit)
+  const labels = new Map(kayak.labels)
+  const picks: Tour[] = praised ? [first, ...kayak.picks] : [...kayak.picks]
+  if (praised) labels.set(first.id, 'гости хвалят больше всего')
+  for (const t of rest) {
+    if (picks.length >= limit) break
+    picks.push(t)
+  }
+  return { picks: picks.slice(0, limit), labels }
+}
+
+/**
+ * What the model sees when a tool fails: no supplier names, HTTP codes or
+ * "сбой" — those words used to end up in the reply verbatim. The raw error
+ * stays in the journal.
+ */
+export function sanitizeToolResult(name: string, result: unknown): unknown {
+  if (!result || typeof result !== 'object') return result
+  const r = result as Record<string, unknown>
+  if (typeof r.error !== 'string') return result
+  if (r.error === 'destination_not_supported') return result
+  if (/^Нужен |^Нет показанных/.test(r.error)) return result
+  const notes: Record<string, string> = {
+    search_tours:
+      'Подобрать варианты прямо сейчас не получилось. Не говорите о сбое, системе или поиске. Повторите search_tours один раз, слегка изменив даты (±1–2 дня). Если снова пусто — продолжайте разговор по сути (направление, курорты, сезон) и предложите посмотреть соседние даты.',
+    get_hotel_info: 'Вызовите research_hotel с нужной темой — он соберёт факты об отеле.',
+    get_hotel_reviews: 'Вызовите research_hotel с нужной темой — он соберёт, что пишут гости.',
+    get_hotel_offers:
+      'Номера сейчас не подобрались. Не говорите о сбое. Расскажите о номерах отеля через research_hotel(topic: «номера») и предложите сдвинуть даты на пару дней.',
+  }
+  return { error: 'unavailable', note: notes[name] ?? 'Продолжайте разговор по сути, без упоминания технических проблем.' }
+}
+
 function summarizeTourCard(tour: Tour, hotel?: HotelInfo | null) {
   const h = hotel ?? getCachedHotel(Number(tour.id.replace(/^lt_/, '')))
   const url = h?.link
@@ -454,7 +526,7 @@ function hotelFallbackComment(t: Tour): string | undefined {
   const facts = (t.inclusions ?? [])
     .filter((x) => x && !x.toLowerCase().startsWith('проживание'))
     // No prices in the comment — the card already shows them right above.
-    .filter((x) => !/₽|руб|\d{4,}|\d{1,3}(?:[\s ]\d{3})+/i.test(x))
+    .filter((x) => !/₽|руб|\d{4,}|\d{1,3}(?:[\s\u00A0]\d{3})+/i.test(x))
     .slice(0, 3)
   return facts.length ? facts.join(' · ') : undefined
 }
@@ -496,14 +568,16 @@ function toolLabel(name: string, args: Record<string, unknown>): string {
         : String(args.hotel_name ?? '').trim()
       const date = String(args.start_date_from ?? '').trim()
       const bits = [dest, names, date].filter(Boolean).join(' · ')
-      return `Ищу туры${bits ? ` — ${bits}` : ''}`
+      return `Подбираю туры${bits ? ` — ${bits}` : ''}`
     }
     case 'get_hotel_info':
-      return 'Читаю карточку отеля'
+      return 'Изучаю отель'
     case 'get_hotel_reviews':
-      return 'Читаю отзывы гостей'
+      return 'Смотрю, что пишут гости'
+    case 'research_hotel':
+      return `Узнаю подробности${args.topic ? ` — ${String(args.topic).slice(0, 40)}` : ''}`
     case 'get_hotel_offers':
-      return 'Запрашиваю номера и цены у туроператоров'
+      return 'Подбираю номера и цены'
     case 'annotate_hotels':
       return 'Готовлю персональные комментарии к отелям'
     case 'show_destinations':
@@ -537,6 +611,8 @@ function toolSummary(name: string, result: unknown): string | undefined {
       return 'карточка получена'
     case 'get_hotel_reviews':
       return `отзывов: ${Number((result as Record<string, unknown>)?.count ?? 0)}`
+    case 'research_hotel':
+      return `фактов: ${Array.isArray(r.facts) ? r.facts.length : 0}`
     case 'annotate_hotels':
       return `комментариев: ${Number(r.annotated ?? 0)}`
     case 'show_destinations':
@@ -594,6 +670,9 @@ async function runTool(
       // Default 5 cards, but the customer can ask for more ("покажи 10") —
       // the cap is a default, not a wall.
       const limit = Math.min(Math.max(Number(args.limit ?? 5), 1), 10)
+      const requestedFeatures = Array.isArray(args.features) ? (args.features as unknown[]).map(String) : []
+      const softFeatures = splitFeatures(requestedFeatures).rest
+      const hardFeatures = requestedFeatures.filter((f) => !softFeatures.includes(f.trim().toLowerCase()))
 
       try {
         if (
@@ -656,7 +735,9 @@ async function runTool(
             ? (args.beach_types as string[])
             : undefined,
           firstLine: Boolean(args.first_line),
-          features: Array.isArray(args.features) ? (args.features as string[]) : undefined,
+          // Soft features (анимация, спа …) are confirmed below by the facts
+          // cascade; Level.Travel gets only what it can filter itself.
+          features: hardFeatures.length ? hardFeatures : undefined,
           mealTypes: Array.isArray(args.meal_types) ? (args.meal_types as string[]) : undefined,
           hotelNames: (() => {
             const arr = Array.isArray(args.hotel_names)
@@ -669,19 +750,42 @@ async function runTool(
           })(),
           priceMax: args.price_max ? Number(args.price_max) : undefined,
           sortBy: args.sort_by === 'rating' ? 'rating' : 'price',
-          limit: Math.max(limit * 2, 20),
+          limit: softFeatures.length ? 60 : Math.max(limit * 2, 20),
         })
 
         session.ltRequestId = result.requestId
         session.ltOkOperators = result.okOperators
 
-        const { picks, labels } = pickKayakStyle(result.tours, limit)
+        // «Отели с классной анимацией»: check every candidate against the
+        // hotel card, guest reviews and the web; confirmed ones go first,
+        // the ones guests praise most — at the very top.
+        let pool = result.tours
+        let confirmations = new Map<number, FeatureConfirmation>()
+        let softConfirmed = 0
+        const praiseOf = (t: Tour) => confirmations.get(Number(t.id.replace(/^lt_/, '')))?.praise ?? 0
+        if (softFeatures.length && pool.length) {
+          const ids = pool.map((t) => Number(t.id.replace(/^lt_/, ''))).filter(Number.isFinite)
+          confirmations = await confirmFeatures(ids, softFeatures)
+          const isFull = (t: Tour) =>
+            (confirmations.get(Number(t.id.replace(/^lt_/, '')))?.confirmed.length ?? 0) >= softFeatures.length
+          const confirmed = [...pool.filter(isFull)].sort((a, b) => praiseOf(b) - praiseOf(a))
+          softConfirmed = confirmed.length
+          pool =
+            confirmed.length >= Math.min(3, limit)
+              ? confirmed
+              : [...confirmed, ...pool.filter((t) => !isFull(t))]
+        }
+
+        const { picks, labels } = softFeatures.length && softConfirmed
+          ? pickSoftFeatureTop(pool, limit, softConfirmed, praiseOf)
+          : pickKayakStyle(pool, limit)
         const sentPicks = picks.map((t) => ({
           ...t,
           pick_label: labels.get(t.id),
-          // Fact-based fallback comment from Level.Travel data; the model
-          // replaces it with a personalized one via annotate_hotels.
-          comment: hotelFallbackComment(t),
+          // Fact-based fallback comment; the model replaces it with a
+          // personalized one via annotate_hotels.
+          comment:
+            evidenceComment(confirmations.get(Number(t.id.replace(/^lt_/, '')))) ?? hotelFallbackComment(t),
         }))
         session.lastPicks = sentPicks
         session.lastPicksMessageId = messageId
@@ -708,7 +812,10 @@ async function runTool(
           price_range:
             minPrice != null ? { from: minPrice, to: maxPrice, currency: 'RUB' } : null,
           features_requested: args.features ?? [],
-          features_filter_applied: result.stats?.featuresApplied ?? false,
+          features_filter_applied: softFeatures.length
+            ? softConfirmed > 0
+            : result.stats?.featuresApplied ?? false,
+          soft_features_confirmed_hotels: softFeatures.length ? softConfirmed : undefined,
           // Filters the booking system applied to the WHOLE result set: every
           // hotel in `hotels` satisfies each of them.
           filters_applied: result.stats?.ltFiltersApplied?.length ? result.stats.ltFiltersApplied : undefined,
@@ -718,15 +825,26 @@ async function runTool(
           hotels_matching_filters: result.stats?.ltHotelsCount,
           assumed_country: result.stats?.assumedCountry,
           features_matched: result.stats?.featuresMatched,
-          hotels: picks.map((t) => ({ ...summarizeTourCard(t), pick_label: labels.get(t.id) })),
+          hotels: picks.map((t) => {
+            const c = confirmations.get(Number(t.id.replace(/^lt_/, '')))
+            return {
+              ...summarizeTourCard(t),
+              pick_label: labels.get(t.id),
+              confirmed_features: softFeatures.length ? (c?.confirmed ?? []) : undefined,
+              evidence: c && Object.keys(c.evidence).length
+                ? Object.fromEntries(Object.entries(c.evidence).map(([f, e]) => [f, `${e.source === 'guests' ? 'гости: ' : ''}${e.text}`]))
+                : undefined,
+              guests_praise: c?.praise || undefined,
+            }
+          }),
           note:
             picks.length === 0 && nameMiss
-              ? `По направлению найдено ${result.stats?.raw ?? 0} отелей, но по названию совпадений нет. Скажите клиенту честно: направление в системе есть, а именно этот отель/бренд на эти даты не найден. Предложите проверить написание (латиницей) или показать похожие отели уровня без фильтра названия.`
+              ? `По направлению найдено ${result.stats?.raw ?? 0} отелей, но по названию совпадений нет. Скажите клиенту по-человечески: на эти даты именно этого отеля (бренда) среди вариантов нет — без слов «система», «поиск», «не найден в базе». Предложите соседние даты или похожие отели того же уровня рядом и уточните написание названия, если оно необычное.`
               : picks.length === 0 && result.stats?.ltFiltersApplied?.length
               ? `Под все пожелания сразу (${result.stats.ltFiltersApplied.join('; ')}) на эти даты отелей нет. Скажите клиенту честно и по-человечески, без слов «фильтр» и «система» (например: «с аквапарком и на первой линии в Кемере на эти даты ничего нет — посмотрим вторую линию или Белек?»), либо сами ослабьте одно пожелание (курорт, звёзды, линия, даты ±3 дня) и повторите поиск.`
               : picks.length === 0
               ? 'Пустая выдача — ослабьте фильтры (даты ±3–5 дней, звёзды, бюджет, соседний курорт) и повторите поиск.'
-              : 'Карточки отелей УЖЕ показаны клиенту. ФИЛЬТРЫ: всё из filters_applied система применила ко всей выдаче — у КАЖДОГО показанного отеля это есть (например, «аквапарк» в filters_applied = аквапарк у всех отелей подтверждён), об этом можно говорить уверенно и писать в комментариях. hotels_matching_filters — сколько всего отелей подошло. filters_not_available — таких вариантов в этом поиске нет вообще: скажите об этом честно и предложите замену. Если features_filter_applied = false — часть удобств (анимация, спа, теннис и т.п.) проверить не удалось: не утверждайте их; проверить конкретный отель можно через get_hotel_info или get_hotel_reviews. НИКОГДА не говорите, что поиск по аквапарку, детскому клубу, бассейну и т.п. невозможен — он работает. ГОВОРИТЕ ПО-ЧЕЛОВЕЧЕСКИ: клиенту не нужны слова «фильтр», «система», «выдача», «применено» — скажите как турагент: «подобрала пятёрки в Анталье, где есть аквапарк, всего нашлось 37». СЛЕДУЮЩИЙ ШАГ: annotate_hotels — по одной фразе на отель, ТОЛЬКО по фактам из выдачи и filters_applied (пляж, линия, питание, удобства, рейтинг, pick_label). Потом текст: 1–2 фразы + один вопрос, без markdown и ссылок.',
+              : 'Карточки отелей УЖЕ показаны клиенту. ФИЛЬТРЫ: всё из filters_applied система применила ко всей выдаче — у КАЖДОГО показанного отеля это есть (например, «аквапарк» в filters_applied = аквапарк у всех отелей подтверждён), об этом можно говорить уверенно и писать в комментариях. hotels_matching_filters — сколько всего отелей подошло. filters_not_available — таких вариантов в этом поиске нет вообще: скажите об этом честно и предложите замену. Удобства вроде анимации, спа, тенниса: у каждого отеля есть confirmed_features и evidence — что подтверждено и чем (описание отеля, гости). Подтверждённое называйте уверенно, своими словами («гости очень хвалят вечерние шоу»). У отеля без подтверждения не утверждайте удобство и не говорите, что его нет или что «информации нет» — просто не делайте на нём акцент; если клиент спросит именно про него, вызовите research_hotel. НИКОГДА не говорите, что поиск по аквапарку, детскому клубу, бассейну и т.п. невозможен — он работает. ГОВОРИТЕ ПО-ЧЕЛОВЕЧЕСКИ: клиенту не нужны слова «фильтр», «система», «выдача», «применено» — скажите как турагент: «подобрала пятёрки в Анталье, где есть аквапарк, всего нашлось 37». СЛЕДУЮЩИЙ ШАГ: annotate_hotels — по одной фразе на отель, ТОЛЬКО по фактам из выдачи, filters_applied и evidence (пляж, линия, питание, удобства, впечатления гостей, рейтинг, pick_label). Потом текст: 1–2 фразы + один вопрос, без markdown и ссылок.',
         }
 
         // Remember this search so an identical repeat within the turn is served
@@ -767,7 +885,7 @@ async function runTool(
         reviews_count: info.review_count,
         images: info.images.slice(0, 5),
         data_note:
-          'facilities и description — полные данные по отелю. Отвечая про удобства (аквапарк, рестораны a la carte, детский клуб, спа), ищите их СНАЧАЛА в facilities и description. Если там нет — скажите, что такой информации нет, и НЕ утверждайте, что удобства не существует.',
+          'Ищите ответ в facilities и description. Если нужного там нет — НЕ говорите клиенту «информации нет», а вызовите research_hotel(hotel_id, topic): он проверит отзывы гостей.',
       }
     }
 
@@ -807,20 +925,32 @@ async function runTool(
         (session.ltRequestId
           ? { requestId: session.ltRequestId, okOperators: session.ltOkOperators ?? [] }
           : null)
-      if (!hotelCtx) {
-        return {
-          error: 'Нет активного поиска. Сначала вызовите search_tours, затем get_hotel_offers.',
-        }
-      }
       try {
-        const offers = await getHotelOffers({
-          requestId: hotelCtx.requestId,
+        // Expired / failed / empty chat search, or no search at all → a new
+        // search for this one hotel. "Сбой" never reaches the customer.
+        const found = await getHotelOffersResilient({
           hotelId,
-          operatorIds: hotelCtx.okOperators,
+          requestId: hotelCtx?.requestId,
+          operatorIds: hotelCtx?.okOperators,
           mealTypes: Array.isArray(args.meal_types) ? (args.meal_types as string[]) : undefined,
           roomType: args.room_type ? String(args.room_type) : undefined,
           deepRooms: Boolean(args.all_rooms),
         })
+        const offers = found.offers
+        if (!offers.length) {
+          const facts = await researchHotel(hotelId, 'номера').catch(() => null)
+          const tour = getCachedTour(`lt_${hotelId}`)
+          if (tour) send(ws, { type: 'tours', tours: [tour], messageId })
+          return {
+            hotel_id: hotelId,
+            rooms_count: 0,
+            rooms: [],
+            hotel_page_url: await hotelPageUrl(hotelId),
+            room_facts: facts?.facts.map((f) => f.text) ?? [],
+            note:
+              'Свободных номеров на эти даты и состав сейчас не видно. НЕ говорите о сбоях, системе, поиске и «попробую через минуту». По-человечески: на эти даты по этому отелю мест не видно — расскажите, какие номера в отеле бывают (room_facts), и предложите сдвинуть даты на пару дней или посмотреть похожие отели рядом. Один вопрос.',
+          }
+        }
         const rooms = groupOffersByRoom(offers).map((r) => ({
           ...r,
           booking_url: buildBookingUrl({
@@ -849,9 +979,7 @@ async function runTool(
           offers_count: offers.length,
           offers_sample: offers.slice(0, 8),
           note:
-            offers.length === 0
-              ? 'Предложений нет — попробуйте другой отель или ослабьте фильтр питания/номера.'
-              : 'Карточки номеров УЖЕ показаны клиенту в чате с ценами и кнопками бронирования. НЕ дублируйте список текстом и не вставляйте ссылки. Ваш текст: 1–2 фразы — какой номер лучше под задачу клиента — и один вопрос.',
+            'Карточки номеров УЖЕ показаны клиенту в чате с ценами и кнопками бронирования. НЕ дублируйте список текстом и не вставляйте ссылки. Ваш текст: 1–2 фразы — какой номер лучше под задачу клиента (состав семьи!) — и один вопрос.',
         }
       } catch (err) {
         const hotel = getCachedHotel(hotelId)
@@ -878,6 +1006,30 @@ async function runTool(
           }
         }
         return { error: err instanceof Error ? err.message : 'Ошибка get_hotel_offers' }
+      }
+    }
+
+    case 'research_hotel': {
+      const hotelId = Number(args.hotel_id)
+      const topic = String(args.topic ?? '').trim()
+      if (!Number.isFinite(hotelId)) return { error: 'Нужен hotel_id' }
+      if (!topic) return { error: 'Нужен topic — о чём вопрос' }
+      const r = await researchHotel(hotelId, topic)
+      return {
+        hotel_id: hotelId,
+        name: r.name,
+        topic,
+        facts: r.facts.map((f) => ({
+          from: f.source === 'guests' ? 'гости' : 'отель',
+          tone: f.tone,
+          text: f.text,
+        })),
+        guests_mentions: r.guests.total || undefined,
+        guests_positive: r.guests.positive || undefined,
+        guests_negative: r.guests.negative || undefined,
+        note: r.found
+          ? 'Ответьте клиенту по сути, своими словами, как турагент, который сам всё знает: факты отеля — уверенно («в отеле есть…»), мнения гостей — «гости хвалят / отмечают / жалуются». Не называйте источники, не говорите про описание, отзывы на сайте, систему или поиск. Плюсы и минусы — честно и коротко.'
+          : 'Конкретики по этой теме нет. НЕ говорите «информации нет», «не нашла», «не удалось проверить». Ответьте по сути, как опытный турагент: что обычно бывает в отелях такого уровня и типа (мягко: «как правило»), без утверждений про этот отель, и предложите полезное — подобрать похожие отели, где это точно есть, или рассказать о другом.',
       }
     }
 
@@ -981,7 +1133,7 @@ export async function handleLlmMessage(
   send(ws, { type: 'typing' })
 
   let guard = 0
-  while (guard < 8) {
+  while (guard < 10) {
     guard += 1
 
     const provider = resolveProvider()
@@ -1045,6 +1197,7 @@ export async function handleLlmMessage(
           tool: toolCall.function.name,
           args: toolArgs,
           summary: toolSummary(toolCall.function.name, result),
+          api_calls: apiCalls.length ? apiCalls : undefined,
         })
         const resultError =
           result && typeof result === 'object' && 'error' in (result as Record<string, unknown>)
@@ -1056,21 +1209,48 @@ export async function handleLlmMessage(
             arguments: toolArgs,
             status: resultError ? 'error' : 'done',
             label: toolLabel(toolCall.function.name, toolArgs),
-            summary: toolSummary(toolCall.function.name, result),
-            api_calls: apiCalls.length ? apiCalls : undefined,
+            // No supplier endpoints / raw errors to the browser: the summary
+            // of a failed step is neutral; details stay in the journal.
+            summary: resultError ? undefined : toolSummary(toolCall.function.name, result),
           },
           messageId,
         })
         session.llmMessages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: JSON.stringify(result),
+          content: JSON.stringify(sanitizeToolResult(toolCall.function.name, result)),
         })
       }
       continue
     }
 
-    const content = assistantMessage.content ?? 'Чем ещё могу помочь с подбором?'
+    let content = assistantMessage.content ?? 'Чем ещё могу помочь с подбором?'
+    // Safety net for the tone: if the reply still talks like a program
+    // («система не отдаёт», «информации нет», «временный сбой»), rewrite it
+    // once as a live travel agent would say it.
+    const machineTalk = findMachineTalk(content)
+    if (machineTalk.length) {
+      const rewritten = await humanizeReply(content, async (system, user) => {
+        const body: Record<string, unknown> = {
+          model,
+          temperature: 0.4,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+        }
+        if (provider.thinkingDisabled) body.thinking = { type: 'disabled' }
+        const c = await client.chat.completions.create(body as unknown as ChatCompletionCreateParamsNonStreaming)
+        return c.choices[0]?.message?.content ?? ''
+      })
+      logEvent({
+        session: session.logId ?? 'unknown',
+        kind: 'humanize',
+        found: machineTalk,
+        changed: rewritten !== content,
+      })
+      content = rewritten
+    }
     session.llmMessages.push({ role: 'assistant', content })
     session.history.push({ role: 'assistant', content })
     logEvent({ session: session.logId ?? 'unknown', kind: 'assistant', text: content })

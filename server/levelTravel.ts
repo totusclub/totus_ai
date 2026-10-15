@@ -37,7 +37,7 @@ function appendAflt(url: string) {
   }
 }
 
-export const BUILD_TAG = 'v38-context-restore · 2026-08-11'
+export const BUILD_TAG = 'v39-facts-cascade · 2026-10-08'
 
 export function isLevelTravelEnabled() {
   const key = process.env.LEVEL_TRAVEL_API_KEY?.trim()
@@ -99,7 +99,11 @@ async function ltGet<T = unknown>(path: string, params: Record<string, string | 
     .filter(([k]) => k !== 'request_id')
     .map(([k, v]) => `${k}=${String(v).slice(0, 40)}`)
     .join(' · ')
-  const res = await fetch(url, { headers: headers() })
+  // A hung request used to freeze the whole answer; give up after 25 s.
+  const res = await fetch(url, {
+    headers: headers(),
+    signal: AbortSignal.timeout(Number(process.env.LEVEL_TRAVEL_TIMEOUT_MS) || 25000),
+  })
   recordTrace({
     endpoint: `GET api.level.travel${path}`,
     params: paramsReadable,
@@ -1880,9 +1884,12 @@ export function groupOffersByRoom(
  */
 const hotelScopedCache = new Map<string, { requestId: string; ts: number }>()
 
-async function hotelScopedRequestId(hotelId: number): Promise<string | null> {
+async function hotelScopedRequestId(
+  hotelId: number,
+  fallbackParams?: SearchParams,
+): Promise<string | null> {
   const ctx = hotelSearchIndex.get(hotelId) ?? lastSearchContext
-  const params = ctx?.params
+  const params = ctx?.params ?? fallbackParams
   if (!params) return null
   const key = `${hotelId}:${params.start_date}:${params.nights}:${params.adults}:${params.from_city}`
   const cached = hotelScopedCache.get(key)
@@ -2110,6 +2117,86 @@ export async function actualizeOffer(params: { requestId: string; tourId: string
   }
   offerCache.set(params.tourId, { ...cached, ...result })
   return result
+}
+
+/**
+ * Search parameters for a hotel when there is no search to reuse (server
+ * restarted, chat restored, hotel named by the customer): the hotel's country,
+ * ~3 weeks ahead, 7 nights, 2 adults. Used only to get room offers.
+ */
+export async function defaultParamsForHotel(hotelId: number): Promise<SearchParams | null> {
+  const known = hotelSearchIndex.get(hotelId)?.params
+  if (known) return known
+  const info = getCachedHotel(hotelId) ?? (await fetchHotelInfo(hotelId).catch(() => null))
+  const dest = resolveDestination(info?.country) ?? resolveDestination(info?.region) ?? resolveDestination(info?.city)
+  if (!dest) return null
+  return {
+    from_city: resolveFromCity(undefined),
+    to_country: dest.country,
+    nights: 7,
+    start_date: defaultStartDate(),
+    adults: 2,
+  }
+}
+
+/**
+ * Room offers that do not give up. The fast path reads the chat's search; if
+ * that search has expired, failed or has no offers for this hotel (or there is
+ * no search at all), we run a NEW search narrowed to this one hotel — the way
+ * totus.club's hotel page does — and read offers from it. The customer only
+ * ever sees rooms, never "сбой".
+ */
+export async function getHotelOffersResilient(params: {
+  hotelId: number
+  requestId?: string
+  operatorIds?: string[]
+  mealTypes?: string[]
+  roomType?: string
+  deepRooms?: boolean
+}): Promise<{ offers: Awaited<ReturnType<typeof getHotelOffers>>; via: 'search' | 'hotel_search' | 'none'; error?: string }> {
+  let error: string | undefined
+  if (params.requestId && !params.deepRooms) {
+    try {
+      const offers = await getHotelOffers({
+        requestId: params.requestId,
+        hotelId: params.hotelId,
+        operatorIds: params.operatorIds,
+        mealTypes: params.mealTypes,
+        roomType: params.roomType,
+      })
+      if (offers.length) return { offers, via: 'search' }
+      console.warn(`[level.travel] rooms hotel=${params.hotelId}: 0 offers in chat search — hotel-scoped retry`)
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err)
+      console.warn(`[level.travel] rooms hotel=${params.hotelId}: ${error} — hotel-scoped retry`)
+    }
+  }
+  try {
+    const fallback = await defaultParamsForHotel(params.hotelId)
+    const rid = await hotelScopedRequestId(params.hotelId, fallback ?? undefined)
+    if (!rid) return { offers: [], via: 'none', error: error ?? 'no search parameters for this hotel' }
+    const used = hotelSearchIndex.get(params.hotelId)?.params ?? lastSearchContext?.params ?? fallback ?? undefined
+    // Booking links for these rooms must point at the search that has them.
+    hotelSearchIndex.set(params.hotelId, { requestId: rid, okOperators: [], params: used })
+    const offers = await getHotelOffers({
+      requestId: rid,
+      hotelId: params.hotelId,
+      mealTypes: params.mealTypes,
+      roomType: params.roomType,
+    })
+    return { offers, via: 'hotel_search', error }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`[level.travel] rooms hotel=${params.hotelId}: hotel-scoped search failed: ${msg}`)
+    return { offers: [], via: 'none', error: msg }
+  }
+}
+
+/** Link to the hotel page on totus.club (with the best search we have). */
+export async function hotelPageUrl(hotelId: number): Promise<string | undefined> {
+  const ctx = hotelSearchIndex.get(hotelId)
+  const params = ctx?.params ?? (await defaultParamsForHotel(hotelId)) ?? undefined
+  return buildTotusHotelUrl({ hotelId, requestId: ctx?.requestId, params })
 }
 
 export interface HotelReview {

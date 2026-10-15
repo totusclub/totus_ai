@@ -114,6 +114,8 @@ app.get('/api/health', (_req, res) => {
     // online badge. Remove after kedam-WEB reinstalls the package (>= 1.0.11).
     kimi: llmStatus(),
     levelTravel: levelTravelStatus(),
+    // Deployed version marker (STATUS D3): changes with every server release.
+    build: BUILD_TAG,
   })
 })
 

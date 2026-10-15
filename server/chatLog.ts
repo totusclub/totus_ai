@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { maskDeep, maskPii } from './pii/detect.js'
 
 /**
  * Diagnostic journal of real dialogues.
@@ -17,7 +18,7 @@ import path from 'node:path'
 const LOG_DIR =
   process.env.TOTUS_LOG_DIR?.trim() || path.join(os.homedir(), '.totus-chat-logs')
 
-export type LogKind = 'user' | 'assistant' | 'tool' | 'error' | 'humanize'
+export type LogKind = 'user' | 'assistant' | 'tool' | 'error' | 'humanize' | 'pii_blocked'
 
 export interface LogEntry {
   ts: string
@@ -33,6 +34,9 @@ export interface LogEntry {
   /** humanize: machine phrases found in the reply and whether it was rewritten */
   found?: string[]
   changed?: boolean
+  /** pii_blocked: types of personal data found (never the values) */
+  types?: string[]
+  stage?: string
 }
 
 function fileForToday() {
@@ -40,13 +44,10 @@ function fileForToday() {
   return path.join(LOG_DIR, `chat-${day}.jsonl`)
 }
 
-/** Never log anything that looks like personal data. */
+/** Never log personal data in the open: the same detector as for the chat. */
 function scrub(text?: string): string | undefined {
   if (!text) return text
-  return text
-    .replace(/\+?\d[\d\s()-]{9,}\d/g, '[телефон]')
-    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]')
-    .slice(0, 2000)
+  return maskPii(text.slice(0, 2000))
 }
 
 export function logEvent(entry: Omit<LogEntry, 'ts'>) {
@@ -56,6 +57,8 @@ export function logEvent(entry: Omit<LogEntry, 'ts'>) {
       ts: new Date().toISOString(),
       ...entry,
       text: scrub(entry.text),
+      summary: scrub(entry.summary),
+      args: entry.args === undefined ? undefined : maskDeep(entry.args),
     }
     appendFileSync(fileForToday(), `${JSON.stringify(line)}\n`, 'utf8')
   } catch {

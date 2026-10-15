@@ -34,6 +34,7 @@ import {
 } from './levelTravel.js'
 import { confirmFeatures, evidenceComment, researchHotel, type FeatureConfirmation } from './hotelFacts.js'
 import { findMachineTalk, humanizeReply } from './humanTone.js'
+import { assertNoPiiInRequest, guardContext } from './pii/guard.js'
 
 export const TOUR_TOOLS: ChatCompletionTool[] = [
   {
@@ -361,6 +362,16 @@ function getClient() {
 
 function getModel() {
   return resolveProvider().model
+}
+
+/**
+ * The ONLY way to call DeepSeek. Every request passes the personal-data check
+ * first: a user message with personal data stops the request (PiiBlockedError),
+ * Mila's earlier replies are masked. A new call site cannot forget the check.
+ */
+async function callDeepSeek(client: OpenAI, body: Record<string, unknown>, hotelNames?: string[]) {
+  const safe = assertNoPiiInRequest(body as { messages?: Array<{ role?: string; content?: unknown }> }, guardContext({ hotelNames }))
+  return client.chat.completions.create(safe as unknown as ChatCompletionCreateParamsNonStreaming)
 }
 
 function send(ws: WebSocket, payload: Record<string, unknown>) {
@@ -1149,9 +1160,7 @@ export async function handleLlmMessage(
     }
     if (provider.thinkingDisabled) requestBody.thinking = { type: 'disabled' }
 
-    const completion = await client.chat.completions.create(
-      requestBody as unknown as ChatCompletionCreateParamsNonStreaming,
-    )
+    const completion = await callDeepSeek(client, requestBody, session.lastPicks?.map((t) => t.name))
 
     const choice = completion.choices[0]
     const assistantMessage = choice.message
@@ -1240,7 +1249,7 @@ export async function handleLlmMessage(
           ],
         }
         if (provider.thinkingDisabled) body.thinking = { type: 'disabled' }
-        const c = await client.chat.completions.create(body as unknown as ChatCompletionCreateParamsNonStreaming)
+        const c = await callDeepSeek(client, body, session.lastPicks?.map((t) => t.name))
         return c.choices[0]?.message?.content ?? ''
       })
       logEvent({

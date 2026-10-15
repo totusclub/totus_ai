@@ -36,6 +36,7 @@ import {
 } from './authUser.js'
 import { dbStatus, ensureChatSchema, isDbConfigured } from './db.js'
 import { registerChatHistoryRoutes } from './chatHistory.js'
+import { PII_RULES_VERSION } from './pii/detect.js'
 import type { BookingRequest, SearchFilters, Tour } from './types.js'
 
 const PORT = Number(process.env.PORT ?? 3011)
@@ -116,6 +117,8 @@ app.get('/api/health', (_req, res) => {
     levelTravel: levelTravelStatus(),
     // Deployed version marker (STATUS D3): changes with every server release.
     build: BUILD_TAG,
+    // Personal data never goes to the model; version of the detection rules.
+    pii: { guard: 'enforce', rules: PII_RULES_VERSION },
   })
 })
 

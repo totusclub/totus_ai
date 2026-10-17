@@ -57,7 +57,7 @@ export function removeMadeUpPhones(text: string, allowedPhone = ''): string {
  */
 export function stripTemplateOpener(text: string): string {
   const m = text.match(
-    /^\s*(?:Отличн(?:ый|ая|ое)\s+(?:выбор|вопрос|задача|план|идея|запрос)|Прекрасн(?:ый|ая|ое)\s+(?:выбор|вопрос|идея)|Конечно)[^.!?\n]{0,40}[!.]\s*/u,
+    /^\s*(?:(?:(?:(?:Отличн|Прекрасн|Замечательн|Чудесн)(?:ый|ая|ое))\s+(?:выбор|вопрос|задача|план|идея|запрос|подход|цель|мысль)(?:[^.!?\n—–:]{0,40}[!.]|\s*[—–:,-]+))|Конечно[!,]|Конечно\s*[—–])\s*/u,
   )
   if (!m) return text
   const rest = text.slice(m[0].length)

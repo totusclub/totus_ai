@@ -1060,6 +1060,26 @@ async function runTool(
 
 const MAX_TOOL_ROUNDS = 10
 
+export const ANKETA_NUDGE =
+  'Стоп: ты собиралась ответить клиенту анкетой (куда, когда, откуда, сколько вас) вместо подбора. Так нельзя — турагент сначала показывает варианты. Сделай поиск сейчас: недостающее подставь сама — направление самое подходящее по сезону и пожеланиям клиента (несколько подходящих стран — show_destinations), вылет из Москвы, даты — ближайший подходящий месяц, состав — из сообщения или двое взрослых; пожелания клиента передай в features и другие параметры search_tours. Потом 2–4 живые фразы: что подобрала и почему, какие допущения сделала, что из особых пожеланий подтвердит наш оператор, и ОДИН вопрос. Если клиент спрашивает не про подбор (документы, визы, правила) — просто ответь по сути и задай не больше одного вопроса.'
+
+/**
+ * A reply that asks the customer for search parameters instead of searching:
+ * two or more questions, or a question about two of where / from where /
+ * when / who. One question after an answer is fine.
+ */
+export function isQuestionnaire(text: string): boolean {
+  const t = text.toLowerCase().replace(/ё/g, 'е')
+  const questions = (t.match(/\?/g) ?? []).length
+  const asks = [
+    /(куда|какое направление|какую страну|какая страна|турция, египет|в какую сторону)[^.!]{0,60}\?|куда (хотите|смотр|планир|поед|лет)/,
+    /(откуда|город вылета|из какого города)/,
+    /(какие|на какие|примерно какие)[^.?!]{0,20}дат|когда (планир|хотите|собира|лет)|на какой месяц|в какой месяц/,
+    /(сколько вас|сколько человек|состав|кто едет|сколько взрослых|возраст (ребенка|детей))/,
+  ].filter((re) => re.test(t)).length
+  return (questions >= 2 && asks >= 1) || asks >= 2
+}
+
 /** Stream a reply from Mila that did not come from the model (fallbacks). */
 export async function streamHumanReply(ws: WebSocket, session: Session, text: string, messageId: string) {
   session.llmMessages?.push({ role: 'assistant', content: text })
@@ -1110,6 +1130,11 @@ export async function handleLlmMessage(
   send(ws, { type: 'typing' })
 
   let guard = 0
+  // One nudge per message: a questionnaire instead of a search goes back to
+  // the model once (owner, 18.10.2026: of 96 detailed requests only 13 got a
+  // search — the rest got «скажите, куда, когда и сколько вас»).
+  let anketaNudged = false
+  let searchedThisTurn = false
   while (guard < MAX_TOOL_ROUNDS) {
     guard += 1
 
@@ -1158,6 +1183,7 @@ export async function handleLlmMessage(
           },
           messageId,
         })
+        if (toolCall.function.name === 'search_tours' || toolCall.function.name === 'show_destinations') searchedThisTurn = true
         const traceFrom = apiTraceLength()
         const result = await runTool(
           toolCall.function.name,
@@ -1200,6 +1226,15 @@ export async function handleLlmMessage(
       }
       continue
     }
+
+    if (!anketaNudged && !searchedThisTurn && guard < MAX_TOOL_ROUNDS && isQuestionnaire(assistantMessage.content ?? '')) {
+      anketaNudged = true
+      logEvent({ session: session.logId ?? 'unknown', kind: 'anketa_nudge', text: (assistantMessage.content ?? '').slice(0, 300) })
+      // A temporary instruction for this round only; removed right after.
+      session.llmMessages.push({ role: 'system', content: ANKETA_NUDGE })
+      continue
+    }
+    session.llmMessages = session.llmMessages.filter((m) => !(m.role === 'system' && m.content === ANKETA_NUDGE))
 
     let content = stripTemplateOpener(assistantMessage.content?.trim() || 'Чем ещё могу помочь с подбором?')
     // Safety net for the tone: if the reply still talks like a program
@@ -1247,6 +1282,7 @@ export async function handleLlmMessage(
 
   // Not reachable in practice (the last round has tool_choice «none»), but
   // the customer still gets a human reply, never a technical error.
+  session.llmMessages = session.llmMessages.filter((m) => !(m.role === 'system' && m.content === ANKETA_NUDGE))
   await streamHumanReply(ws, session, fallbackReply('stuck'), messageId)
 }
 

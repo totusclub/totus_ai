@@ -12,7 +12,7 @@ import {
   stripTemplateOpener,
 } from '../server/humanTone.ts'
 import { buildTotusSystemPrompt, realPhone, supportContactsLine } from '../server/totusPrompt.ts'
-import { humanDate } from '../server/llm.ts'
+import { humanDate, isQuestionnaire } from '../server/llm.ts'
 import { buildPiiWarning } from '../server/pii/guard.ts'
 
 let passed = 0
@@ -150,6 +150,29 @@ await check('предупреждение о личных данных — го�
   }
   assert.match(buildPiiWarning(['phone']), /«Звонок в поддержку»/)
   assert.match(buildPiiWarning(['name']), /^Давайте без имён/)
+})
+
+// Replies from the run of the owner's 500 requests on totus.club, 18.10.2026.
+await check('анкета вместо подбора распознаётся, один вопрос после ответа — нет', () => {
+  const ANKETA = [
+    'Понимаю — с ночными пробуждениями малыша тишина важнее всего. Чтобы подобрать отель, где номер будет поспокойнее, скажите: куда хотите лететь и примерно когда? И сколько вас — взрослые и возраст ребёнка.',
+    'Отличный подход — с малышом быт важнее вида из окна. Подскажите, пожалуйста, куда смотрим: Турция, Египет, Таиланд или что-то другое? И откуда удобнее вылетать?',
+    'Отличная задача — с четырьмя детьми главное, чтобы все были в одном семейном номере. Подскажите, куда хотите — Турция, Египет, что-то ещё? И из какого города вылет и на какие примерно даты?',
+  ]
+  const FINE = [
+    'Для выезда ребёнка нужен загранпаспорт и свидетельство о рождении. Куда планируете поездку?',
+    'Подобрала пятёрки в Белеке с аквапарком. Вам важнее песчаный пляж или аквапарк?',
+    'В марте в Анталье днём +17. Подобрать варианты на март?',
+    'Рада, что пригодилось! Хорошего дня!',
+  ]
+  for (const t of ANKETA) assert.ok(isQuestionnaire(t), t)
+  for (const t of FINE) assert.ok(!isQuestionnaire(t), t)
+})
+
+await check('«Отличная задача —», «Отличный подход —» в начале тоже срезаются', () => {
+  assert.equal(stripTemplateOpener('Отличная задача — с четырьмя детьми главное, чтобы все жили рядом.'), 'С четырьмя детьми главное, чтобы все жили рядом.')
+  assert.equal(stripTemplateOpener('Отличный подход — с малышом быт важнее вида из окна.'), 'С малышом быт важнее вида из окна.')
+  assert.equal(stripTemplateOpener('Конечно, помогу с этим. Живой специалист на связи.'), 'Помогу с этим. Живой специалист на связи.')
 })
 
 console.log(`check-human-tone: ${passed} passed`)

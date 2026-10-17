@@ -57,6 +57,8 @@ const ltCalls: string[] = []
 const llmBodies: Json[] = []
 let script: Completion[] = []
 let enqueued = 0
+// When set, the model endpoint answers with this HTTP error (no retries on 400).
+let llmFailStatus = 0
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -67,6 +69,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   if (url.host === 'llm.test') {
     const body = JSON.parse(String(init?.body)) as Json
     llmBodies.push(body)
+    if (llmFailStatus) return json({ error: { message: 'Invalid request: model overloaded', type: 'invalid_request_error' } }, llmFailStatus)
     const isHumanize = !body.tools
     const step = isHumanize
       ? { content: 'На эти даты в Rixos Park Belek мест не вижу — сдвинем вылет на пару дней?' }
@@ -217,7 +220,10 @@ await check('сообщение с телефоном и именем не ух�
   assert.equal(llmBodies.length, before, 'модель не должна вызываться')
   assert.deepEqual((a.events.find((e) => e.type === 'pii_blocked') as Json)?.types, ['name', 'phone'])
   const warning = text(a.events)
-  assert.match(warning, /уберите из сообщения личные данные — имя или фамилию и номер телефона — и отправьте его ещё раз/)
+  assert.match(warning, /^Имя или фамилию и номер телефона лучше в этот чат не писать/)
+  assert.match(warning, /то же сообщение ещё раз, только без этого/)
+  assert.match(warning, /«Звонок в поддержку»/)
+  assert.ok(!/не обработала|уберите из сообщения/.test(warning), 'без канцелярита')
   assert.ok(!/Анна|916/.test(warning), 'значение в предупреждении не повторяется')
   assert.ok(a.events.some((e) => e.type === 'done'))
   assert.equal(s.history.length, 0, 'в сессию не попало')
@@ -304,6 +310,64 @@ await check('история чатов (MySQL) и журнал — только 
   assert.equal(entry.text, '[скрыто: имя], ваш номер [скрыто: телефон]')
   assert.deepEqual(entry.args, { q: '[скрыто: e-mail]' })
   assert.ok(!sentToModel().includes('anna@mail.ru'))
+})
+
+// ---------------------------------------------------------------------------
+// Mila is a travel agent, not a terminal (owner, 18.10.2026).
+// ---------------------------------------------------------------------------
+await check('ошибка модели: клиент видит слова Милы, а не «Не удалось выполнить запрос: …»', async () => {
+  const s = createSession()
+  llmFailStatus = 400
+  const a = fakeWs()
+  try {
+    await handleAssistantMessage(a.ws as never, s, 'хочу в Египет в декабре', deps)
+  } finally {
+    llmFailStatus = 0
+  }
+  assert.ok(!a.events.some((e) => e.type === 'error'), 'событие error показывается клиенту как текст ошибки')
+  const t = text(a.events)
+  assert.match(t, /ещё раз/)
+  assert.ok(!/не удалось|ошибк|invalid|overloaded|400|запрос/i.test(t), t)
+  assert.ok(a.events.some((e) => e.type === 'done'))
+  assert.equal(s.history.length, 0, 'неотвеченное сообщение не остаётся в диалоге')
+})
+
+await check('много шагов подряд: последний шаг — ответ без инструментов, а не «Слишком много шагов…»', async () => {
+  const s = createSession()
+  const dest = { tool: { name: 'show_destinations', args: { items: [{ name: 'Египет', tagline: 'тепло' }] } } }
+  script = [...Array.from({ length: 9 }, () => dest), { content: 'В декабре тепло в Египте — подобрать отели?' }]
+  const before = llmBodies.length
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, s, 'куда поехать в декабре?', deps)
+  const bodies = llmBodies.slice(before)
+  assert.equal(bodies.length, 10)
+  assert.equal(bodies.at(-1)!.tool_choice, 'none', 'на последнем шаге модель должна ответить текстом')
+  assert.ok(bodies.slice(0, -1).every((b) => b.tool_choice === 'auto'))
+  assert.equal(text(a.events), 'В декабре тепло в Египте — подобрать отели?')
+  assert.ok(!a.events.some((e) => e.type === 'error'))
+})
+
+await check('выдуманный телефон и «Отличный выбор!» не доходят до клиента', async () => {
+  script = [{ content: 'Отличный выбор! Возвратом занимается поддержка: личный кабинет, «Звонок в поддержку», либо по телефону +7 (800) 000-00-00.' }]
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, createSession(), 'хочу вернуть деньги', deps)
+  const t = text(a.events)
+  assert.ok(!/800|000-00-00/.test(t), t)
+  assert.ok(!/^Отличный выбор/.test(t), t)
+})
+
+await check('метка шага — по-человечески: «с 17 ноября», без 2026-11-17', async () => {
+  script = [
+    { tool: { name: 'search_tours', args: { destination: 'Турция', start_date_from: '2026-11-17', adults: 2 } } },
+    { content: 'Подобрала варианты в Турции.' },
+  ]
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, createSession(), 'Турция', deps)
+  const labels = a.events.filter((e) => e.type === 'tool').map((e) => String((e.tool as Json).label))
+  assert.ok(labels.some((l) => /Подбираю туры — Турция, с 17 ноября/.test(l)), labels.join(' | '))
+  assert.ok(!labels.some((l) => /\d{4}-\d{2}-\d{2}/.test(l)), labels.join(' | '))
+  const r = toolResult('search_tours')!
+  assert.equal(r.total_found, 5, 'список не обрезан — число известно')
 })
 
 console.log(`check-mila-flow: ${passed} passed`)

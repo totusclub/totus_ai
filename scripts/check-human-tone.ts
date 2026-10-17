@@ -111,6 +111,7 @@ await check('запасные ответы — слова Милы, без «о�
       const t = fallbackReply(kind, i)
       assert.deepEqual(findMachineTalk(t), [], t)
       assert.ok(!/ошибк|запрос|сервер|не удалось/i.test(t), t)
+      if (kind === 'error') assert.match(t, /ещё раз/, `просьба отправить ещё раз: ${t}`)
     }
   }
 })

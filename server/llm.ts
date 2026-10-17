@@ -22,6 +22,7 @@ import {
   getCachedTour,
   findDestinationImage,
   hotelPageUrl,
+  supportedCountryNamesRu,
   looksLikeHotelName,
   resolveFromCity,
   searchLevelTravelPackages,
@@ -1104,7 +1105,12 @@ export async function handleLlmMessage(
   const client = getClient()
   const model = getModel()
   const messageId = randomUUID()
-  const basePrompt = buildTotusSystemPrompt()
+  const countriesRu = supportedCountryNamesRu()
+  const basePrompt =
+    buildTotusSystemPrompt() +
+    (countriesRu.length
+      ? `\n\n## Страны, куда у нас есть туры\n${countriesRu.join(', ')}.\nСоветуй и показывай только их. Страны не из списка — честно «туда пакетных туров у нас нет» и похожая альтернатива из списка.`
+      : '')
   // A restored dialogue carries a note about hotels already shown — without it
   // "этот отель" is unresolvable, because card names never appear in the text.
   const systemPrompt = session.contextNote

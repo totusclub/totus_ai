@@ -1078,7 +1078,9 @@ export function isQuestionnaire(text: string): boolean {
     /(какие|на какие|примерно какие)[^.?!]{0,20}дат|когда (планир|хотите|собира|лет)|на какой месяц|в какой месяц/,
     /(сколько вас|сколько человек|состав|кто едет|сколько взрослых|возраст (ребенка|детей))/,
   ].filter((re) => re.test(t)).length
-  return (questions >= 2 && asks >= 1) || asks >= 2
+  if ((questions >= 2 && asks >= 1) || asks >= 2) return true
+  // «Пока подберу варианты из Москвы…» — and no search followed.
+  return /(сейчас|пока|давайте|могу)\s+(сразу\s+)?(подберу|покажу|посмотрю|подобрать|показать)\s+(вам\s+)?(варианты|отели|туры|подборк)/.test(t)
 }
 
 /** Stream a reply from Mila that did not come from the model (fallbacks). */

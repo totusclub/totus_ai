@@ -20,11 +20,7 @@ import {
   supportedCountries,
   getCachedHotel,
   getCachedTour,
-  buildBookingUrl,
   findDestinationImage,
-  getHotelOffersResilient,
-  getHotelSearchContext,
-  groupOffersByRoom,
   hotelPageUrl,
   looksLikeHotelName,
   resolveFromCity,
@@ -203,25 +199,15 @@ export const TOUR_TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
-      name: 'get_hotel_offers',
+      name: 'hotel_rooms_page',
       description:
-        'Варианты туров в конкретный отель из последнего поиска: тип номера, питание, туроператор, рейс, цена и ссылка на каждый тур. Вызывать после search_tours.',
+        'Любой вопрос про номера: какие номера есть, цена конкретного номера, ванна, балкон, вид, кроватка, кровати, соединительная дверь, этаж, «покажи номера». Номера Мила НЕ подбирает: инструмент показывает клиенту карточку отеля с кнопкой на страницу отеля на totus.club, где все номера с ценами на его даты. Возвращает hotel_page_url и общие сведения о номерах отеля.',
       parameters: {
         type: 'object',
         required: ['hotel_id'],
         properties: {
           hotel_id: { type: 'integer' },
-          meal_types: {
-            type: 'array',
-            items: { type: 'string', enum: ['RO', 'BB', 'HB', 'FB', 'AI', 'UAI'] },
-            description: 'Опциональный фильтр',
-          },
-          room_type: { type: 'string', description: 'Опциональный фильтр по типу номера' },
-          all_rooms: {
-            type: 'boolean',
-            description:
-              'Полный каталог номеров отеля. МЕДЛЕННО — запускает отдельный поиск, 30-45 секунд. Включай ТОЛЬКО если клиент прямо просит показать все варианты размещения. По умолчанию false: быстрый ответ по доступным номерам.',
-          },
+          question: { type: 'string', description: 'Что клиент хочет знать о номере (коротко), например «ванна в номере»' },
         },
       },
     },
@@ -374,6 +360,10 @@ async function callDeepSeek(client: OpenAI, body: Record<string, unknown>, hotel
   return client.chat.completions.create(safe as unknown as ChatCompletionCreateParamsNonStreaming)
 }
 
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))])
+}
+
 function send(ws: WebSocket, payload: Record<string, unknown>) {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload))
 }
@@ -490,8 +480,8 @@ export function sanitizeToolResult(name: string, result: unknown): unknown {
       'Подобрать варианты прямо сейчас не получилось. Не говорите о сбое, системе или поиске. Повторите search_tours один раз, слегка изменив даты (±1–2 дня). Если снова пусто — продолжайте разговор по сути (направление, курорты, сезон) и предложите посмотреть соседние даты.',
     get_hotel_info: 'Вызовите research_hotel с нужной темой — он соберёт факты об отеле.',
     get_hotel_reviews: 'Вызовите research_hotel с нужной темой — он соберёт, что пишут гости.',
-    get_hotel_offers:
-      'Номера сейчас не подобрались. Не говорите о сбое. Расскажите о номерах отеля через research_hotel(topic: «номера») и предложите сдвинуть даты на пару дней.',
+    hotel_rooms_page:
+      'Не говорите о сбое. Скажите, что все номера с ценами — на странице отеля на totus.club (кнопка на карточке отеля), а детали по конкретному номеру подтвердит наш оператор в личном кабинете: «Чат с поддержкой» или «Звонок в поддержку».',
   }
   return { error: 'unavailable', note: notes[name] ?? 'Продолжайте разговор по сути, без упоминания технических проблем.' }
 }
@@ -601,7 +591,8 @@ function toolLabel(name: string, args: Record<string, unknown>): string {
     case 'research_hotel':
       return `Узнаю подробности${args.topic ? ` — ${String(args.topic).slice(0, 40)}` : ''}`
     case 'get_hotel_offers':
-      return 'Подбираю номера и цены'
+    case 'hotel_rooms_page':
+      return 'Открываю страницу отеля'
     case 'annotate_hotels':
       return 'Готовлю персональные комментарии к отелям'
     case 'show_destinations':
@@ -626,11 +617,9 @@ function toolSummary(name: string, result: unknown): string | undefined {
           : `в выдаче ${raw} отелей, после фильтров ${total}`
         : `найдено отелей: ${total}`
     }
-    case 'get_hotel_offers': {
-      const offers = Number(r.offers_count ?? 0)
-      const rooms = Number(r.rooms_count ?? 0)
-      return `${offers} предложений · типов номеров: ${rooms}`
-    }
+    case 'get_hotel_offers':
+    case 'hotel_rooms_page':
+      return r.hotel_page_url ? 'страница отеля' : 'карточка отеля'
     case 'get_hotel_info':
       return 'карточка получена'
     case 'get_hotel_reviews':
@@ -952,95 +941,31 @@ async function runTool(
       }
     }
 
-    case 'get_hotel_offers': {
+    // Owner, 18.10.2026: «наш ИИ не ищет по номерам, пока у нас этого нет —
+    // когда вопрос про номер: вот вам страница на totus.club, выбирайте, дальше
+    // спросите у нашего оператора». No room search, no room cards: the hotel
+    // card with the button to the hotel page, plus general facts about rooms.
+    case 'get_hotel_offers':
+    case 'hotel_rooms_page': {
       const hotelId = Number(args.hotel_id)
       if (!Number.isFinite(hotelId)) return { error: 'Нужен hotel_id' }
-      const hotelCtx =
-        getHotelSearchContext(hotelId) ??
-        (session.ltRequestId
-          ? { requestId: session.ltRequestId, okOperators: session.ltOkOperators ?? [] }
-          : null)
-      try {
-        // Expired / failed / empty chat search, or no search at all → a new
-        // search for this one hotel. "Сбой" never reaches the customer.
-        const found = await getHotelOffersResilient({
-          hotelId,
-          requestId: hotelCtx?.requestId,
-          operatorIds: hotelCtx?.okOperators,
-          mealTypes: Array.isArray(args.meal_types) ? (args.meal_types as string[]) : undefined,
-          roomType: args.room_type ? String(args.room_type) : undefined,
-          deepRooms: Boolean(args.all_rooms),
-        })
-        const offers = found.offers
-        if (!offers.length) {
-          const facts = await researchHotel(hotelId, 'номера').catch(() => null)
-          const tour = getCachedTour(`lt_${hotelId}`)
-          if (tour) send(ws, { type: 'tours', tours: [tour], messageId })
-          return {
-            hotel_id: hotelId,
-            rooms_count: 0,
-            rooms: [],
-            hotel_page_url: await hotelPageUrl(hotelId),
-            room_facts: facts?.facts.map((f) => f.text) ?? [],
-            note:
-              'Свободных номеров на эти даты и состав сейчас не видно. НЕ говорите о сбоях, системе, поиске и «попробую через минуту». По-человечески: на эти даты по этому отелю мест не видно — расскажите, какие номера в отеле бывают (room_facts), и предложите сдвинуть даты на пару дней или посмотреть похожие отели рядом. Один вопрос.',
-          }
-        }
-        const rooms = groupOffersByRoom(offers).map((r) => ({
-          ...r,
-          booking_url: buildBookingUrl({
-            tourId: r.sample_tour_id,
-            hotelId,
-            room: r.room_type,
-          }),
-        }))
-        const cachedHotel = getCachedHotel(hotelId)
-        send(ws, {
-          type: 'rooms',
-          hotel: {
-            id: hotelId,
-            name: cachedHotel?.name,
-            image: cachedHotel?.images?.[0],
-          },
-          rooms,
-          messageId,
-        })
-        return {
-          hotel_id: hotelId,
-          rooms_count: rooms.length,
-          // Room types with min price per meal — this is what the client asks
-          // about ("какие там номера?"). Show ALL of these, not just one.
-          rooms,
-          offers_count: offers.length,
-          offers_sample: offers.slice(0, 8),
-          note:
-            'Карточки номеров УЖЕ показаны клиенту в чате с ценами и кнопками бронирования. НЕ дублируйте список текстом и не вставляйте ссылки. Ваш текст: 1–2 фразы — какой номер лучше под задачу клиента (состав семьи!) — и один вопрос.',
-        }
-      } catch (err) {
-        const hotel = getCachedHotel(hotelId)
-        if (hotel?.link || hotel?.cheapest_tour_id) {
-          return {
-            hotel_id: hotelId,
-            count: 1,
-            offers: [
-              {
-                hotel_id: hotelId,
-                hotel_name: hotel.name,
-                price: hotel.min_price,
-                currency: hotel.currency || 'RUB',
-                meal: hotel.meal_prices
-                  ? Object.keys(hotel.meal_prices).sort(
-                      (a, b) => (hotel.meal_prices![a] ?? 0) - (hotel.meal_prices![b] ?? 0),
-                    )[0]
-                  : undefined,
-                url: hotel.link,
-                tour_url: hotel.link,
-                note: 'Краткий вариант из выдачи поиска',
-              },
-            ],
-          }
-        }
-        return { error: err instanceof Error ? err.message : 'Ошибка get_hotel_offers' }
+      const [pageUrl, facts] = await Promise.all([
+        hotelPageUrl(hotelId).catch(() => undefined),
+        withTimeout(researchHotel(hotelId, 'номера'), 8000).catch(() => null),
+      ])
+      const tour = getCachedTour(`lt_${hotelId}`)
+      if (tour) send(ws, { type: 'tours', tours: [{ ...tour, ...(pageUrl ? { link: pageUrl } : {}) }], messageId })
+      const hotel = getCachedHotel(hotelId)
+      return {
+        hotel_id: hotelId,
+        hotel_name: hotel?.name ?? tour?.name,
+        hotel_card_shown: Boolean(tour),
+        hotel_page_url: pageUrl,
+        room_facts: facts?.facts.map((f) => f.text).slice(0, 5) ?? [],
+        note:
+          'Номера ты НЕ подбираешь и цены отдельных номеров не называешь. Скажи по-человечески: все номера с ценами на даты клиента — на странице отеля на totus.club' +
+          (tour ? ' (кнопка «Перейти к бронированию» на карточке отеля выше)' : ', ссылка — hotel_page_url (напиши её текстом один раз, без markdown)') +
+          ', выбрать номер можно там. Если клиенту важна конкретика номера (ванна, кроватка, кровати, вид, этаж, соединительная дверь, звукоизоляция) — это подтвердит наш оператор: личный кабинет, «Чат с поддержкой» или «Звонок в поддержку». Из room_facts можно мягко сказать, какие номера в отеле бывают («есть семейные номера с двумя спальнями»), но не обещай, что это будет именно в его номере. Ничего не выдумывай. 2–4 фразы и один вопрос.',
       }
     }
 
@@ -1128,7 +1053,7 @@ async function runTool(
 
     default:
       return {
-        error: `Инструмент «${name}» недоступен. В v3 есть только search_tours, get_hotel_info, get_hotel_offers. Бронирование — по ссылке на тур.`,
+        error: `Инструмент «${name}» недоступен. Есть search_tours, get_hotel_info, hotel_rooms_page, get_hotel_reviews, research_hotel, annotate_hotels, show_destinations. Бронирование — на странице отеля.`,
       }
   }
 }

@@ -7,6 +7,8 @@
  * Run:  npx tsx scripts/mila-live-scenarios.ts                 (wss://apiv2.totus.club)
  *       MILA_WS=ws://localhost:3011/ws/assistant npx tsx scripts/mila-live-scenarios.ts
  *       … -- --only=бот,телефон                                (scenarios by name)
+ *       … -- --file=scripts/fixtures/mila-500-requests.json --from=1 --limit=50 --par=3
+ *            (the owner's 500 requests, 18.10.2026; --out=report.jsonl saves every reply)
  *
  * Every reply is checked for: machine talk and terminal phrases, made-up phone
  * numbers, template openers, «нашлось 20 отелей», questionnaire instead of a
@@ -16,13 +18,20 @@
 import { findMachineTalk } from '../server/humanTone.ts'
 
 const URL = process.env.MILA_WS || 'wss://apiv2.totus.club/ws/assistant'
-const only = (process.argv.find((a) => a.startsWith('--only=')) ?? '').slice(7).split(',').filter(Boolean)
+const arg = (name: string) => (process.argv.find((a) => a.startsWith(`--${name}=`)) ?? '').slice(name.length + 3)
+const only = arg('only').split(',').filter(Boolean)
+const FILE = arg('file')
+const FROM = Number(arg('from') || 1)
+const LIMIT = Number(arg('limit') || 0)
+const PAR = Math.min(Math.max(Number(arg('par') || 1), 1), 5)
+const OUT = arg('out')
 
 type Expect = {
   search?: boolean // a search must run in this turn
   english?: boolean // the reply must be in English
   honest?: boolean // «ты бот?» — must not claim to be human
   noPhone?: boolean
+  room?: boolean // a question about a room
 }
 type Scenario = { name: string; turns: Array<[string, Expect?]> }
 
@@ -45,6 +54,9 @@ const SCENARIOS: Scenario[] = [
   { name: 'имя', turns: [['меня зовут Аня, хочу в Турцию']] },
   { name: 'бали-бюджет', turns: [['тур на Бали за 50 тысяч на двоих на 2 недели']] },
   { name: 'сочи', turns: [['хочу в турцию из Сочи']] },
+  { name: 'номер', turns: [['расскажи про отель Rixos Premium Belek'], ['а какие там номера и есть ли в номере ванна?', { room: true }]] },
+  { name: 'кроватка', turns: [['Можно подобрать отель, где детская кроватка именно с жёстким матрасом? Ребёнку девять месяцев, хотим в Турцию в июне', { search: true, room: true }]] },
+  { name: 'ереван', turns: [['Летим из Еревана с ребёнком семи месяцев, хотим в Египет в декабре', { search: true }]] },
   { name: 'ещё-варианты', turns: [['в турцию с детьми', { search: true }], ['дети 4 и 7', { search: true }], ['а покажи ещё варианты']] },
 ]
 
@@ -52,6 +64,10 @@ const OPENER = /^\s*(Отличн(ый|ая|ое)\s+(выбор|вопрос|з�
 const COUNTS = /нашл(ось|ось всего)\s+\d+\s+(отел|вариант)|всего\s+(подходящих\s+)?(отелей\s+)?(нашлось\s+)?\d+[^.]{0,30}показала/i
 const QUESTIONNAIRE = /(уточн(ю|ите)|подскажите)[^.?!]{0,40}(город\s+вылета|даты)[^?]*\?/i
 const ISO = /\d{4}-\d{2}-\d{2}/
+// A question about a room → the hotel page on totus.club + our operator.
+const ROOM_Q = /(?<![а-яё])номер(?:а|е|ом|у|ов|ах)?(?![а-яё])(?![^.?!]{0,20}(телефон|заказ|брони|рейса|паспорт))|кроватк|ванн(?:а|ой|у)(?![а-яё])|балкон|соединительн|звукоизоляц/i
+const ROOM_OK = /страниц[аеуы]\s+отеля|карточк|оператор|«Чат с поддержкой»|«Звонок в поддержку»/i
+const PROMISE = /(?<![а-яё])(я\s+)?(проверю|согласую|напишу\s+в\s+отель|свяжусь\s+с\s+отелем|забронирую|закажу|гарантирую)(?![а-яё])/i
 const CLAIMS_HUMAN = /(я\s+)?(живой\s+(человек|турагент)|не\s+бот|настоящий\s+человек)/i
 const ADMITS_AI = /виртуальн|искусственн|ИИ|AI|программ|нейросет/i
 
@@ -118,7 +134,51 @@ function problems(turn: Turn, expect: Expect = {}): string[] {
   if (expect.english && /[а-яё]{4,}/i.test(turn.text.replace(/«[^»]*»/g, ''))) p.push('ответила не по-английски')
   if (expect.honest && (CLAIMS_HUMAN.test(turn.text) || !ADMITS_AI.test(turn.text))) p.push('выдаёт себя за человека')
   if (expect.noPhone && /(\+7|\b8)[\s(-]*\d{3}/.test(turn.text)) p.push('назвала номер телефона')
+  if (turn.tools.some((t) => t.startsWith('get_hotel_offers')) || turn.events.includes('rooms')) p.push('подбирает номера (должна вести на страницу отеля)')
+  if (expect.room && !ROOM_OK.test(turn.text)) p.push('вопрос про номер: нет страницы отеля и оператора')
+  if (PROMISE.test(turn.text)) p.push(`обещает сама: «${turn.text.match(PROMISE)![0]}»`)
+  if (/\*\*|^#{1,3}\s|^\s*[-*]\s/m.test(turn.text)) p.push('markdown')
   return p
+}
+
+async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let k = 0
+  await Promise.all(
+    Array.from({ length: n }, async () => {
+      while (k < items.length) {
+        const j = k++
+        out[j] = await fn(items[j])
+      }
+    }),
+  )
+  return out
+}
+
+if (FILE) {
+  // A list of single messages: [{n, q, cat?}] or ["…"].
+  const { readFileSync, appendFileSync } = await import('node:fs')
+  const raw = JSON.parse(readFileSync(FILE, 'utf8')) as Array<{ n?: number; q: string; cat?: string } | string>
+  const items = raw
+    .map((x, i) => (typeof x === 'string' ? { n: i + 1, q: x } : { n: x.n ?? i + 1, q: x.q, cat: x.cat }))
+    .filter((x) => x.n >= FROM)
+    .slice(0, LIMIT || undefined)
+  console.log(`Мила вживую: ${URL}, запросов ${items.length} (параллельно ${PAR})\n`)
+  let bad = 0
+  const counts = new Map<string, number>()
+  await pool(items, PAR, async (it) => {
+    const [t] = await runDialogue([it.q])
+    const pr = problems(t, { room: ROOM_Q.test(it.q) })
+    if (pr.length) bad++
+    for (const x of pr) counts.set(x.replace(/«.*»/, '«…»'), (counts.get(x.replace(/«.*»/, '«…»')) ?? 0) + 1)
+    console.log(`#${it.n} › ${it.q.slice(0, 140)}`)
+    console.log(`    ${t.text.replace(/\n+/g, ' ').slice(0, 500)}`)
+    console.log(`    [${(t.ms / 1000).toFixed(1)} с${t.tools.length ? ` · ${[...new Set(t.tools)].join(', ')}` : ''}]${pr.length ? `  ✗ ${pr.join('; ')}` : '  ✓'}`)
+    if (OUT) appendFileSync(OUT, JSON.stringify({ n: it.n, q: it.q, reply: t.text, tools: t.tools, events: t.events, ms: t.ms, problems: pr }) + '\n')
+  })
+  console.log(`\nИтого: ${items.length - bad}/${items.length} ответов без замечаний`)
+  for (const [k, v] of [...counts].sort((a, b) => b[1] - a[1])) console.log(`  ${v} × ${k}`)
+  process.exit(bad ? 1 : 0)
 }
 
 let bad = 0

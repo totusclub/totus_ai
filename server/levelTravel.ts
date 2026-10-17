@@ -821,7 +821,7 @@ function mapHotelToTour(
         description: desc.slice(0, 240),
       },
     ],
-    inclusions: inclusions.length ? inclusions : ['Проживание по пакету Level.Travel'],
+    inclusions: inclusions.length ? inclusions : ['Проживание по выбранному пакету'],
     exclusions: [],
     meeting_point: {
       address: destination,
@@ -833,7 +833,7 @@ function mapHotelToTour(
         ? row.cancellation_policy
         : asRecord(row.cancellation_policy)?.description,
       asRecord(row.cancellation_policy)?.text,
-      'Условия отмены — по правилам туроператора Level.Travel',
+      'Условия отмены — по правилам туроператора; точные условия видны на странице тура до оплаты',
     ),
     guide_languages: ['Russian', 'English'],
     available_dates: available_dates.slice(0, 20),

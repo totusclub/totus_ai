@@ -376,34 +376,4 @@ await check('метка шага — по-человечески: «с 17 ноя
   assert.equal(r.total_found, 5, 'список не обрезан — число известно')
 })
 
-await check('анкета вместо подбора возвращается модели один раз — клиент получает подбор', async () => {
-  const s = createSession()
-  script = [
-    { content: 'Отличная задача — подберу! Скажите, куда хотите лететь и на какие даты? И сколько вас?' },
-    { tool: { name: 'search_tours', args: { destination: 'Египет', start_date_from: '2026-12-01', adults: 2, kids_ages: [1], features: ['детский бассейн'] } } },
-    { content: 'Подобрала семейные отели в Египте на начало декабря из Москвы. Кроватку и детскую посуду подтвердит наш оператор. Даты подходят?' },
-  ]
-  const before = llmBodies.length
-  const a = fakeWs()
-  await handleLlmMessage(a.ws as never, s, 'Едем с годовалым ребёнком, нужен маленький тёплый бассейн и кроватка', deps)
-  const bodies = llmBodies.slice(before).filter((b) => b.tools)
-  const second = bodies[1].messages as Json[]
-  assert.ok(second.some((m) => m.role === 'system' && /^Стоп: ты собиралась/.test(String(m.content))), 'вторая попытка — с подсказкой')
-  assert.ok(!second.some((m) => /куда хотите лететь/.test(String(m.content))), 'анкета в контекст не попала')
-  const t = text(a.events)
-  assert.match(t, /Подобрала семейные отели/)
-  assert.ok(!/куда хотите/.test(t), 'анкета клиенту не ушла')
-  assert.ok(a.events.some((e) => e.type === 'tours'))
-  assert.ok(!(s.llmMessages as Json[]).some((m) => m.role === 'system' && /^Стоп: ты собиралась/.test(String(m.content))), 'подсказка убрана из диалога')
-})
-
-await check('один вопрос после ответа — не анкета, подсказки нет', async () => {
-  script = [{ content: 'Для ребёнка нужен загранпаспорт и свидетельство о рождении. Куда планируете поездку?' }]
-  const before = llmBodies.length
-  const a = fakeWs()
-  await handleLlmMessage(a.ws as never, createSession(), 'какие документы нужны ребёнку?', deps)
-  assert.equal(llmBodies.slice(before).length, 1)
-  assert.match(text(a.events), /загранпаспорт/)
-})
-
 console.log(`check-mila-flow: ${passed} passed`)

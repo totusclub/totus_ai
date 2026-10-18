@@ -19,27 +19,45 @@ function norm(text: string): string {
   return text.toLowerCase().replace(/ё/g, 'е')
 }
 
-/** How strongly a topic matches: number of distinct triggers found. */
+/** Trigger at the start of a word: «поезд» must not fire on «поездка» via «…поезд…» inside a word. */
+function hasTrigger(text: string, trig: string): boolean {
+  let i = text.indexOf(trig)
+  while (i !== -1) {
+    const prev = i === 0 ? '' : text[i - 1]
+    if (!/[а-яa-z0-9]/.test(prev)) return true
+    i = text.indexOf(trig, i + 1)
+  }
+  return false
+}
+
+/** How strongly a topic matches: distinct triggers found, common ones count half. */
 function score(topic: Playbook, text: string): number {
   let n = 0
   for (const t of topic.triggers) {
-    const trig = norm(t).trim()
-    if (trig.length >= 3 && text.includes(trig)) n++
+    if (t.length >= 3 && hasTrigger(text, t)) n += topic.weak.includes(t) ? 0.5 : 1
   }
   return n
 }
 
 /**
- * Topics for this message. The latest message weighs most; the previous one
- * keeps the topic alive in a follow-up («а для неё нужна справка?»).
+ * Topics for this message (at most two). The latest message decides; the
+ * previous one only helps a follow-up («а для неё нужна справка?»).
  */
-export function selectPlaybooks(latest: string, previous = '', limit = 3): Playbook[] {
+export function selectPlaybooks(latest: string, previous = '', limit = 2): Playbook[] {
   const now = norm(latest)
   const before = norm(previous)
-  const scored = PLAYBOOKS.map((p) => ({ p, s: score(p, now) * 2 + score(p, before) }))
-    .filter((x) => x.s >= 2)
+  const scored = PLAYBOOKS.map((p) => ({ p, now: score(p, now), s: score(p, now) + score(p, before) * 0.5 }))
+    .filter((x) => x.now >= 0.5 && x.s >= 1)
     .sort((a, b) => b.s - a.s)
-  return scored.slice(0, limit).map((x) => x.p)
+  if (scored.length) return scored.slice(0, limit).map((x) => x.p)
+  // A short follow-up with no topic of its own («а справка нужна?») stays on
+  // the topic of the previous message.
+  if (now.length > 80 || !before) return []
+  return PLAYBOOKS.map((p) => ({ p, s: score(p, before) }))
+    .filter((x) => x.s >= 1)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 1)
+    .map((x) => x.p)
 }
 
 /** Prompt section with the selected topics (no source links — they are for review). */

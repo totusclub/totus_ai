@@ -376,4 +376,17 @@ await check('метка шага — по-человечески: «с 17 ноя
   assert.equal(r.total_found, 5, 'список не обрезан — число известно')
 })
 
+await check('опыт турагента: тема сообщения попадает в промпт этого шага, светская беседа — без неё', async () => {
+  script = [{ content: 'С малышом лучше короткий перелёт. Подскажите, из какого города полетите, на какие даты и сколько лет малышу?' }]
+  const before = llmBodies.length
+  await handleLlmMessage(fakeWs().ws as never, createSession(), 'Летим с ребёнком семи месяцев, нужна люлька в самолёте', deps)
+  const sys = String(((llmBodies[before].messages as Json[])[0]).content)
+  assert.match(sys, /## Опыт турагента по теме этого сообщения/)
+  assert.match(sys, /младен|люльк/i)
+  script = [{ content: 'Привет! Куда хочется поехать?' }]
+  const b2 = llmBodies.length
+  await handleLlmMessage(fakeWs().ws as never, createSession(), 'привет', deps)
+  assert.ok(!/Опыт турагента/.test(String(((llmBodies[b2].messages as Json[])[0]).content)))
+})
+
 console.log(`check-mila-flow: ${passed} passed`)

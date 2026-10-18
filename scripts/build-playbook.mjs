@@ -16,7 +16,16 @@ const errors = []
 const ids = new Set()
 const MAX = 260
 
-const strList = (v) => (Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : [])
+// Triggers that are too common to pick a topic on their own («маршрут»,
+// «документ», «экскурсия» — frequent in the owner's 500 requests across
+// unrelated topics). Such a trigger counts half.
+const GENERIC = ['месяц', 'маленьк', 'доплат', 'документ', 'паспорт', 'ресторан', 'экскурс', 'маршрут', 'сравни', 'безопасн', 'кухн', 'аренд', 'багаж', 'лестниц', 'отел', 'номер', 'пляж', 'море', 'тур', 'дет', 'ребен']
+const isWeak = (trig) => GENERIC.some((g) => trig.startsWith(g))
+
+// The placeholder phone must never reach the prompt, not even as an example
+// of a mistake — the model would repeat it.
+const clean = (x) => String(x).replace(/\s*\(?\+?7?\s*\(?8?800\)?\s*000-00-00\)?/g, '').replace(/\s{2,}/g, ' ').trim()
+const strList = (v) => (Array.isArray(v) ? v.map(clean).filter(Boolean) : [])
 
 for (const f of files) {
   const list = JSON.parse(readFileSync(path.join(dir, f), 'utf8'))
@@ -37,11 +46,12 @@ for (const f of files) {
       ask: strList(t.ask),
       advise: strList(t.advise),
       facts: (Array.isArray(t.facts) ? t.facts : [])
-        .map((x) => (typeof x === 'string' ? { text: x } : { text: String(x.text ?? '').trim(), source: x.source ? String(x.source) : undefined }))
+        .map((x) => (typeof x === 'string' ? { text: x } : { text: clean(x.text ?? ''), source: x.source ? String(x.source) : undefined }))
         .filter((x) => x.text),
       operator: strList(t.operator),
       avoid: strList(t.avoid),
     }
+    topic.weak = topic.triggers.filter(isWeak)
     if (!topic.title) errors.push(`${where}: нет title`)
     if (topic.triggers.length < 3) errors.push(`${where}: меньше 3 triggers`)
     for (const tr of topic.triggers) if (tr.length < 3) errors.push(`${where}: trigger «${tr}» короче 3 букв`)
@@ -69,6 +79,8 @@ export type Playbook = {
   facts: Array<{ text: string; source?: string }>
   operator: string[]
   avoid: string[]
+  /** Triggers that count half: too common to choose the topic alone. */
+  weak: string[]
 }
 
 export const PLAYBOOKS: Playbook[] = ${JSON.stringify(all, null, 2)}

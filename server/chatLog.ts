@@ -18,7 +18,7 @@ import { maskDeep, maskPii } from './pii/detect.js'
 const LOG_DIR =
   process.env.TOTUS_LOG_DIR?.trim() || path.join(os.homedir(), '.totus-chat-logs')
 
-export type LogKind = 'user' | 'assistant' | 'tool' | 'error' | 'humanize' | 'pii_blocked'
+export type LogKind = 'user' | 'assistant' | 'tool' | 'error' | 'humanize' | 'pii_blocked' | 'playbook'
 
 export interface LogEntry {
   ts: string
@@ -37,6 +37,8 @@ export interface LogEntry {
   /** pii_blocked: types of personal data found (never the values) */
   types?: string[]
   stage?: string
+  /** playbook: ids of «опыт турагента» topics added to the prompt */
+  topics?: string[]
 }
 
 function fileForToday() {

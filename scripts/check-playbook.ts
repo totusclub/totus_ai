@@ -4,7 +4,7 @@
  * Run: npx tsx scripts/check-playbook.ts
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { formatPlaybooks, selectPlaybooks } from '../server/agentPlaybook.ts'
 import { PLAYBOOKS } from '../server/agentPlaybookData.ts'
 
@@ -18,12 +18,17 @@ function check(name: string, fn: () => void) {
 console.log('check-playbook')
 const ids = (t: string, prev = '') => selectPlaybooks(t, prev).map((p) => p.id)
 
-check('данные: темы есть, id уникальны, у фактов источники', () => {
+check('данные: темы есть, id уникальны; у каждого факта источник в docs/playbook', () => {
+  for (const f of readdirSync(new URL('../docs/playbook/', import.meta.url)).filter((x) => x.endsWith('.json'))) {
+    for (const t of JSON.parse(readFileSync(new URL(`../docs/playbook/${f}`, import.meta.url), 'utf8'))) {
+      for (const fact of t.facts) assert.match(String(fact.source ?? ''), /^https?:\/\//, `${t.id}: факт без источника`)
+    }
+  }
   assert.ok(PLAYBOOKS.length >= 40, `тем ${PLAYBOOKS.length}`)
   assert.equal(new Set(PLAYBOOKS.map((p) => p.id)).size, PLAYBOOKS.length)
   for (const p of PLAYBOOKS) {
     assert.ok(p.triggers.length >= 3 && p.advise.length >= 1, p.id)
-    for (const f of p.facts) assert.match(String(f.source ?? ''), /^https?:\/\//, `${p.id}: факт без источника «${f.text.slice(0, 50)}»`)
+
   }
 })
 

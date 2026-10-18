@@ -6,7 +6,7 @@
  * Owner, 19.10.2026: «я дал тебе вопросы, чтобы ты сделала поиск по
  * интернету и ещё больше набралась опыта именно как турагент». Built from
  * research on the owner's 500 requests (scripts/fixtures/mila-500-requests.json);
- * sources are kept in agentPlaybookData.ts for review.
+ * sources are kept in docs/playbook/*.json for review.
  *
  * Only the 1–3 topics that match the customer's message go into the prompt —
  * the whole base would make every request slow and blur the instructions.
@@ -60,7 +60,7 @@ export function selectPlaybooks(latest: string, previous = '', limit = 2): Playb
     .map((x) => x.p)
 }
 
-/** Prompt section with the selected topics (no source links — they are for review). */
+/** Prompt section with the selected topics. */
 export function formatPlaybooks(list: Playbook[]): string {
   if (!list.length) return ''
   const blocks = list.map((p) => {

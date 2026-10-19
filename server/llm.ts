@@ -32,6 +32,7 @@ import {
 import { confirmFeatures, evidenceComment, researchHotel, type FeatureConfirmation } from './hotelFacts.js'
 import { fallbackReply, findMachineTalk, humanizeReply, removeMadeUpPhones, stripTemplateOpener } from './humanTone.js'
 import { assertNoPiiInRequest, guardContext } from './pii/guard.js'
+import { formatPlaybooks, selectPlaybooks } from './agentPlaybook.js'
 
 export const TOUR_TOOLS: ChatCompletionTool[] = [
   {
@@ -1094,9 +1095,15 @@ export async function handleLlmMessage(
       : '')
   // A restored dialogue carries a note about hotels already shown — without it
   // "этот отель" is unresolvable, because card names never appear in the text.
+  // «Опыт турагента»: 1–3 topics that match this message (and the previous
+  // one, for follow-ups) go into the prompt for this turn only.
+  const previousUser = [...session.history].reverse().find((m) => m.role === 'user')?.content ?? ''
+  const playbooks = selectPlaybooks(userText, typeof previousUser === 'string' ? previousUser : '')
+  if (playbooks.length) logEvent({ session: session.logId ?? 'unknown', kind: 'playbook', topics: playbooks.map((p) => p.id) })
+  const withPlaybooks = playbooks.length ? `${basePrompt}\n\n${formatPlaybooks(playbooks)}` : basePrompt
   const systemPrompt = session.contextNote
-    ? `${basePrompt}\n\n## Контекст восстановленного диалога\n${session.contextNote}`
-    : basePrompt
+    ? `${withPlaybooks}\n\n## Контекст восстановленного диалога\n${session.contextNote}`
+    : withPlaybooks
 
   if (!session.llmMessages) {
     session.llmMessages = [{ role: 'system', content: systemPrompt }]

@@ -32,12 +32,13 @@ type Expect = {
   honest?: boolean // «ты бот?» — must not claim to be human
   noPhone?: boolean
   room?: boolean // a question about a room
+  asks?: RegExp // something is missing — the reply must ask for it
 }
 type Scenario = { name: string; turns: Array<[string, Expect?]> }
 
 const SCENARIOS: Scenario[] = [
-  { name: 'турция-бюджет', turns: [['хочу в турцию в ноябре на неделю, нас двое, бюджет до 200 тысяч', { search: true }]] },
-  { name: 'одно-слово', turns: [['в Турцию'], ['нет, передумал, давай в Египет']] },
+  { name: 'турция-бюджет', turns: [['хочу в турцию в ноябре на неделю, нас двое, бюджет до 200 тысяч', { asks: /(из какого города|откуда|город вылета)/i }], ['из Казани', { search: true }]] },
+  { name: 'одно-слово', turns: [['в Турцию', { asks: /(из какого города|откуда|город вылета)[\s\S]*(дат|когда|месяц)|(дат|когда|месяц)[\s\S]*(из какого города|откуда|город вылета)/i }], ['нет, передумал, давай в Египет']] },
   { name: 'анимация', turns: [['нужны хорошие отели с классной анимацией'], ['а в египте?']] },
   { name: 'аля-карт', turns: [['я хочу поехать в турцию в лакшери отель, где много классных аля карт ресторанов.']] },
   { name: 'бот', turns: [['ты бот?', { honest: true }]] },
@@ -56,7 +57,7 @@ const SCENARIOS: Scenario[] = [
   { name: 'сочи', turns: [['хочу в турцию из Сочи']] },
   { name: 'номер', turns: [['расскажи про отель Rixos Premium Belek'], ['а какие там номера и есть ли в номере ванна?', { room: true }]] },
   { name: 'кроватка', turns: [['Можно подобрать отель, где детская кроватка именно с жёстким матрасом? Ребёнку девять месяцев, хотим в Турцию в июне', { room: true }]] },
-  { name: 'ереван', turns: [['Летим из Еревана с ребёнком семи месяцев, хотим в Египет в декабре']] },
+  { name: 'ереван', turns: [['Летим из Еревана с ребёнком семи месяцев, хотим в Египет в декабре', { asks: /(москв|петербург|казан|из какого)/i }]] },
   { name: 'ещё-варианты', turns: [['в турцию с детьми'], ['дети 4 и 7, вылет из Москвы в начале ноября на неделю', { search: true }], ['а покажи ещё варианты']] },
 ]
 
@@ -130,6 +131,8 @@ function problems(turn: Turn, expect: Expect = {}): string[] {
   if (expect.search && !turn.tools.some((t) => t.startsWith('search_tours'))) {
     p.push('не стала искать, хотя всё известно')
   }
+  if (expect.asks && !turn.tools.some((t) => t.startsWith('search_tours')) && !expect.asks.test(turn.text)) p.push('не уточнила недостающее (город, даты, состав)')
+  if (expect.asks && turn.tools.some((t) => t.startsWith('search_tours'))) p.push('искала, не уточнив город, даты или состав')
   if (expect.english && /[а-яё]{4,}/i.test(turn.text.replace(/«[^»]*»/g, ''))) p.push('ответила не по-английски')
   if (expect.honest && (CLAIMS_HUMAN.test(turn.text) || !ADMITS_AI.test(turn.text))) p.push('выдаёт себя за человека')
   if (expect.noPhone && /(\+7|\b8)[\s(-]*\d{3}/.test(turn.text)) p.push('назвала номер телефона')

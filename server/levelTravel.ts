@@ -38,7 +38,7 @@ function appendAflt(url: string) {
   }
 }
 
-export const BUILD_TAG = 'v42-rooms-page · 2026-10-18'
+export const BUILD_TAG = 'v43-agent-playbook · 2026-10-19'
 
 export function isLevelTravelEnabled() {
   const key = process.env.LEVEL_TRAVEL_API_KEY?.trim()

@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import type { BookingRequest, BookingResponse, Tour } from './types.js'
 import { checkUserText, guardContext, maskForContext, PiiBlockedError, sendPiiWarning } from './pii/guard.js'
+import { fallbackReply } from './humanTone.js'
 
 export type BookingStep =
   | 'idle'
@@ -304,16 +305,26 @@ export async function handleAssistantMessage(
 
       const reason = err instanceof Error ? err.message : String(err)
       logEvent({ session: session.logId ?? 'unknown', kind: 'error', text: reason })
-      send(ws, {
-        type: 'error',
-        error: `Не удалось выполнить запрос: ${reason.slice(0, 300)}`,
-      })
-      send(ws, { type: 'done' })
+      // The reason stays in the journal. The customer gets Mila's words, not
+      // «Не удалось выполнить запрос: 429 …» — clients show `error` as her
+      // message, so a technical text looked like a terminal.
+      await sendHumanText(ws, fallbackReply('error'))
       return
     }
   }
 
   await handleRuleBasedMessage(ws, session, userText, deps)
+}
+
+/** A reply from Mila that is not stored in the dialogue (the message was dropped). */
+export async function sendHumanText(ws: WebSocket, text: string) {
+  const messageId = randomUUID()
+  for (const chunk of text.match(/.{1,14}/gs) ?? [text]) {
+    if (ws.readyState !== ws.OPEN) return
+    send(ws, { type: 'token', content: chunk, messageId })
+    await new Promise((r) => setTimeout(r, 10))
+  }
+  send(ws, { type: 'done', messageId })
 }
 
 async function handleRuleBasedMessage(

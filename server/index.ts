@@ -5,7 +5,8 @@ import { createServer } from 'http'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { randomUUID } from 'crypto'
 import { SCHEMA_TABLES } from './data.js'
-import { handleAssistantMessage, createSession, type Session, seedRestoredSession } from './assistant.js'
+import { handleAssistantMessage, createSession, type Session, seedRestoredSession, sendHumanText } from './assistant.js'
+import { fallbackReply } from './humanTone.js'
 import { llmStatus } from './llm.js'
 import {
   BUILD_TAG,
@@ -380,12 +381,9 @@ wss.on('connection', (ws, req) => {
         },
       })
     } catch (err) {
-      ws.send(
-        JSON.stringify({
-          type: 'error',
-          error: err instanceof Error ? err.message : 'Ошибка ассистента',
-        }),
-      )
+      // Details go to the server log; the customer hears Mila, not an error.
+      console.error('[ws] ошибка ассистента:', err)
+      await sendHumanText(ws, fallbackReply('error')).catch(() => undefined)
     }
   })
 })

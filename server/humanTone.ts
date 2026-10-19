@@ -17,13 +17,73 @@ const PATTERNS: Array<[string, RegExp]> = [
   ['в описании нет', /в\s+(описании|карточке)[^.!?]{0,50}?(нет(?![а-яё])|не\s+указ|не\s+сказан|не\s+упомина|ничего)/i],
   ['источники', /в\s+интернете|поисковик|(?<![а-яё])выдач[аеиу](?![а-яё])|по\s+данным\s+(поиска|системы|базы)|(?<![а-яё])инструмент/i],
   ['перезапуск', /перезапущ|попробу(ем|йте|ю)\s+(ещё\s+раз\s+)?через\s+(минуту|пару\s+минут|несколько\s+минут)/i],
+  // A terminal, not a travel agent (owner, 18.10: «она не терминал»).
+  [
+    'терминал',
+    /не\s+могу\s+(обработать|выполнить|распознать)|(?<![а-яё])запрос(?:а|у)?\s+(не\s+)?(обработан|распознан|выполнен)|не\s+входит\s+в\s+мои\s+(функции|обязанности|возможности)|(?<![а-яё])(введите|выберите\s+один\s+из\s+вариантов)(?![а-яё])/i,
+  ],
 ]
 
-/** Labels of machine-talk patterns found in the reply (empty = fine). */
-export function findMachineTalk(text: string): string[] {
+/** Phone-like numbers: Mila must never invent one. */
+const PHONE = /(?:\+7|(?<!\d)8)[\s(-]*\d{3}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}(?!\d)/g
+
+/**
+ * Labels of machine-talk patterns found in the reply (empty = fine).
+ * `allowedPhone` — the company phone from the config; any other number in a
+ * reply is made up («+7 (800) 000-00-00» was sent to customers).
+ */
+export function findMachineTalk(text: string, opts: { allowedPhone?: string } = {}): string[] {
   const found: string[] = []
   for (const [label, re] of PATTERNS) if (re.test(text)) found.push(label)
+  const allowed = String(opts.allowedPhone ?? '').replace(/\D/g, '').slice(-10)
+  const phones = (text.match(PHONE) ?? []).map((p) => p.replace(/\D/g, '').slice(-10))
+  if (phones.some((p) => !allowed || p !== allowed)) found.push('выдуманный телефон')
   return found
+}
+
+/** Last resort: drop a made-up phone together with «или по телефону». */
+export function removeMadeUpPhones(text: string, allowedPhone = ''): string {
+  const allowed = allowedPhone.replace(/\D/g, '').slice(-10)
+  const re = new RegExp(`[,;]?\\s*(?:либо|или)?\\s*(?:по\\s+телефону|по\\s+номеру|телефон:?)?\\s*(${PHONE.source})`, 'gi')
+  return text
+    .replace(re, (m, phone: string) => (allowed && phone.replace(/\D/g, '').slice(-10) === allowed ? m : ''))
+    .replace(/\s+([.,!?])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+}
+
+/**
+ * «Отличный выбор! …», «Отличный вопрос! …» at the very start reads like a
+ * script. Remove such an opener when something meaningful follows it.
+ */
+export function stripTemplateOpener(text: string): string {
+  const m = text.match(
+    /^\s*(?:Отличн(?:ый|ая|ое)\s+(?:выбор|вопрос|задача|план|идея|запрос)|Прекрасн(?:ый|ая|ое)\s+(?:выбор|вопрос|идея)|Конечно)[^.!?\n]{0,40}[!.]\s*/u,
+  )
+  if (!m) return text
+  const rest = text.slice(m[0].length)
+  if (rest.trim().length < 20) return text
+  return rest.charAt(0).toUpperCase() + rest.slice(1)
+}
+
+/**
+ * What Mila says when something on our side went wrong. Never a technical
+ * error in the chat: old and new clients alike show these as her message.
+ */
+const FALLBACKS: Record<'error' | 'stuck', string[]> = {
+  error: [
+    'Ой, ваше сообщение у меня не открылось 🙈 Отправьте его, пожалуйста, ещё раз — я сразу продолжу.',
+    'Кажется, сообщение до меня не дошло целиком. Напишите его ещё раз, пожалуйста — и я продолжу подбор.',
+    'Секунду — сообщение потерялось по дороге. Отправьте его, пожалуйста, ещё раз, и я сразу отвечу.',
+  ],
+  stuck: [
+    'Я ещё сверяю варианты, чтобы не советовать наугад. Напишите, пожалуйста, что для вас главное — направление, даты или бюджет, — и я покажу лучшее.',
+    'Хочу показать вам действительно подходящие варианты, а не первые попавшиеся. Подскажите, что важнее всего — и я сразу соберу подборку.',
+  ],
+}
+
+export function fallbackReply(kind: 'error' | 'stuck', seed = Date.now()): string {
+  const list = FALLBACKS[kind]
+  return list[Math.abs(seed) % list.length]
 }
 
 export const HUMANIZE_SYSTEM = `Ты — редактор ответов Милы, живого турагента «Тотус клуба». Перепиши ответ так, как его сказал бы опытный, тёплый турагент в переписке с клиентом.
@@ -31,6 +91,8 @@ export const HUMANIZE_SYSTEM = `Ты — редактор ответов Мил�
 Правила:
 - Сохрани все факты, названия отелей, цифры, вопрос клиенту и смысл совета. Ничего не выдумывай.
 - Убери любые упоминания «кухни»: систему, базу, поиск, выдачу, сбои, технические проблемы, инструменты, интернет, описание или карточку отеля, названия поставщиков, «перезапущу», «попробуем через минуту».
+- Убери фразы терминала: «не могу обработать запрос», «запрос не распознан», «не входит в мои функции», «введите», «выберите один из вариантов». Мила — турагент, а не справочная.
+- Убери любые номера телефонов, кроме номера компании, если он был в исходном тексте и разрешён. Вместо телефона — «коллеги из поддержки на связи в личном кабинете: «Чат с поддержкой» или «Звонок в поддержку»».
 - Никогда не говори «информации нет», «не нашла», «не удалось проверить». Если в ответе было такое — замени на то, что известно, или на полезное предложение (подобрать похожие отели, где это точно есть, сдвинуть даты, рассказать о другом).
 - Если в ответе говорилось, что номеров/вариантов сейчас не видно из-за сбоя, — скажи по-человечески, что на эти даты по отелю мест не видно, и предложи сдвинуть даты или посмотреть похожие отели.
 - Тон: на «вы», дружелюбно, коротко, без канцелярита и без markdown (никаких **, #, таблиц).
@@ -43,12 +105,13 @@ export const HUMANIZE_SYSTEM = `Ты — редактор ответов Мил�
 export async function humanizeReply(
   text: string,
   complete: (system: string, user: string) => Promise<string>,
+  opts: { allowedPhone?: string } = {},
 ): Promise<string> {
   try {
     const out = (await complete(HUMANIZE_SYSTEM, text)).trim()
     if (!out) return text
     // Prefer the rewrite unless it made things worse.
-    return findMachineTalk(out).length <= findMachineTalk(text).length ? out : text
+    return findMachineTalk(out, opts).length <= findMachineTalk(text, opts).length ? out : text
   } catch {
     return text
   }

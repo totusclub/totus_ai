@@ -33,7 +33,7 @@ import {
   type HotelInfo,
 } from './levelTravel.js'
 import { confirmFeatures, evidenceComment, researchHotel, type FeatureConfirmation } from './hotelFacts.js'
-import { findMachineTalk, humanizeReply } from './humanTone.js'
+import { fallbackReply, findMachineTalk, humanizeReply, removeMadeUpPhones, stripTemplateOpener } from './humanTone.js'
 import { assertNoPiiInRequest, guardContext } from './pii/guard.js'
 
 export const TOUR_TOOLS: ChatCompletionTool[] = [
@@ -569,16 +569,29 @@ function summarizeApiCalls(calls: ReturnType<typeof apiTraceSince>): string[] {
   return lines.slice(0, 12)
 }
 
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+
+/** «2026-11-17» → «17 ноября» (the year only when it is not the current one). */
+export function humanDate(iso: string, now = new Date()): string {
+  const m = String(iso).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return ''
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return ''
+  const sameSeason = y === now.getFullYear() || (y === now.getFullYear() + 1 && mo < now.getMonth() + 1)
+  return `${d} ${MONTHS_GEN[mo - 1]}${sameSeason ? '' : ` ${y}`}`
+}
+
 /** Human-readable step label for the "thinking process" shown in chat. */
 function toolLabel(name: string, args: Record<string, unknown>): string {
   switch (name) {
     case 'search_tours': {
       const dest = String(args.destination ?? '').trim()
-      const names = Array.isArray(args.hotel_names)
-        ? (args.hotel_names as unknown[]).map(String).join(', ')
-        : String(args.hotel_name ?? '').trim()
-      const date = String(args.start_date_from ?? '').trim()
-      const bits = [dest, names, date].filter(Boolean).join(' · ')
+      const list = Array.isArray(args.hotel_names)
+        ? (args.hotel_names as unknown[]).map((x) => String(x).trim()).filter(Boolean)
+        : [String(args.hotel_name ?? '').trim()].filter(Boolean)
+      const names = list.length > 2 ? `${list.slice(0, 2).join(', ')} и ещё ${list.length - 2}` : list.join(', ')
+      const date = humanDate(String(args.start_date_from ?? ''))
+      const bits = [dest, names, date ? `с ${date}` : ''].filter(Boolean).join(', ')
       return `Подбираю туры${bits ? ` — ${bits}` : ''}`
     }
     case 'get_hotel_info':
@@ -812,9 +825,20 @@ async function runTool(
         const nameMiss =
           result.stats?.afterName === 0 ||
           (hasNameFilter && result.tours.length === 0 && (result.stats?.raw ?? 0) > 0)
+        // result.tours is capped by the limit we asked for: «нашлось 20»
+        // was the cap, not the real number. Report a total only when it is
+        // known — the booking system's count, or a list that was not cut off.
+        const askedLimit = softFeatures.length ? 60 : Math.max(limit * 2, 20)
+        const knownTotal =
+          typeof result.stats?.ltHotelsCount === 'number'
+            ? result.stats.ltHotelsCount
+            : result.tours.length < askedLimit
+              ? result.tours.length
+              : undefined
         const payload = {
           count: picks.length,
-          total_found: result.tours.length,
+          total_found: knownTotal,
+          more_available: knownTotal === undefined ? true : knownTotal > picks.length || undefined,
           search_stats: result.stats,
           name_filter_miss: nameMiss || undefined,
           departure_city: departure,
@@ -855,7 +879,7 @@ async function runTool(
               ? `Под все пожелания сразу (${result.stats.ltFiltersApplied.join('; ')}) на эти даты отелей нет. Скажите клиенту честно и по-человечески, без слов «фильтр» и «система» (например: «с аквапарком и на первой линии в Кемере на эти даты ничего нет — посмотрим вторую линию или Белек?»), либо сами ослабьте одно пожелание (курорт, звёзды, линия, даты ±3 дня) и повторите поиск.`
               : picks.length === 0
               ? 'Пустая выдача — ослабьте фильтры (даты ±3–5 дней, звёзды, бюджет, соседний курорт) и повторите поиск.'
-              : 'Карточки отелей УЖЕ показаны клиенту. ФИЛЬТРЫ: всё из filters_applied система применила ко всей выдаче — у КАЖДОГО показанного отеля это есть (например, «аквапарк» в filters_applied = аквапарк у всех отелей подтверждён), об этом можно говорить уверенно и писать в комментариях. hotels_matching_filters — сколько всего отелей подошло. filters_not_available — таких вариантов в этом поиске нет вообще: скажите об этом честно и предложите замену. Удобства вроде анимации, спа, тенниса: у каждого отеля есть confirmed_features и evidence — что подтверждено и чем (описание отеля, гости). Подтверждённое называйте уверенно, своими словами («гости очень хвалят вечерние шоу»). У отеля без подтверждения не утверждайте удобство и не говорите, что его нет или что «информации нет» — просто не делайте на нём акцент; если клиент спросит именно про него, вызовите research_hotel. НИКОГДА не говорите, что поиск по аквапарку, детскому клубу, бассейну и т.п. невозможен — он работает. ГОВОРИТЕ ПО-ЧЕЛОВЕЧЕСКИ: клиенту не нужны слова «фильтр», «система», «выдача», «применено» — скажите как турагент: «подобрала пятёрки в Анталье, где есть аквапарк, всего нашлось 37». СЛЕДУЮЩИЙ ШАГ: annotate_hotels — по одной фразе на отель, ТОЛЬКО по фактам из выдачи, filters_applied и evidence (пляж, линия, питание, удобства, впечатления гостей, рейтинг, pick_label). Потом текст: 1–2 фразы + один вопрос, без markdown и ссылок.',
+              : 'Карточки отелей УЖЕ показаны клиенту. ФИЛЬТРЫ: всё из filters_applied система применила ко всей выдаче — у КАЖДОГО показанного отеля это есть (например, «аквапарк» в filters_applied = аквапарк у всех отелей подтверждён), об этом можно говорить уверенно и писать в комментариях. hotels_matching_filters — сколько всего отелей подошло. filters_not_available — таких вариантов в этом поиске нет вообще: скажите об этом честно и предложите замену. Удобства вроде анимации, спа, тенниса: у каждого отеля есть confirmed_features и evidence — что подтверждено и чем (описание отеля, гости). Подтверждённое называйте уверенно, своими словами («гости очень хвалят вечерние шоу»). У отеля без подтверждения не утверждайте удобство и не говорите, что его нет или что «информации нет» — просто не делайте на нём акцент; если клиент спросит именно про него, вызовите research_hotel. НИКОГДА не говорите, что поиск по аквапарку, детскому клубу, бассейну и т.п. невозможен — он работает. ГОВОРИТЕ ПО-ЧЕЛОВЕЧЕСКИ: клиенту не нужны слова «фильтр», «система», «выдача», «применено» — скажите как турагент: «подобрала пятёрки в Анталье, где есть аквапарк». Сколько всего отелей нашлось — не пересказывайте (total_found и hotels_matching_filters — для вас, а не для клиента), разве что клиент сам спросил. СЛЕДУЮЩИЙ ШАГ: annotate_hotels — по одной фразе на отель, ТОЛЬКО по фактам из выдачи, filters_applied и evidence (пляж, линия, питание, удобства, впечатления гостей, рейтинг, pick_label). Потом текст: 1–2 фразы + один вопрос, без markdown и ссылок.',
         }
 
         // Remember this search so an identical repeat within the turn is served
@@ -1109,6 +1133,23 @@ async function runTool(
   }
 }
 
+const MAX_TOOL_ROUNDS = 10
+
+/** Stream a reply from Mila that did not come from the model (fallbacks). */
+export async function streamHumanReply(ws: WebSocket, session: Session, text: string, messageId: string) {
+  session.llmMessages?.push({ role: 'assistant', content: text })
+  session.history.push({ role: 'assistant', content: text })
+  logEvent({ session: session.logId ?? 'unknown', kind: 'assistant', text })
+  for (const chunk of text.match(/.{1,14}/gs) ?? [text]) {
+    if (ws.readyState !== ws.OPEN) return
+    send(ws, { type: 'token', content: chunk, messageId })
+    await new Promise((r) => setTimeout(r, 10))
+  }
+  send(ws, { type: 'done', messageId })
+}
+
+export { fallbackReply }
+
 export async function handleLlmMessage(
   ws: WebSocket,
   session: Session,
@@ -1144,7 +1185,7 @@ export async function handleLlmMessage(
   send(ws, { type: 'typing' })
 
   let guard = 0
-  while (guard < 10) {
+  while (guard < MAX_TOOL_ROUNDS) {
     guard += 1
 
     const provider = resolveProvider()
@@ -1155,7 +1196,9 @@ export async function handleLlmMessage(
       model,
       messages: session.llmMessages as ChatCompletionMessageParam[],
       tools: TOUR_TOOLS,
-      tool_choice: 'auto',
+      // Last round: the model must answer with what it already has instead of
+      // calling tools again (it used to end with «Слишком много шагов…»).
+      tool_choice: guard >= MAX_TOOL_ROUNDS ? 'none' : 'auto',
       temperature: provider.temperature,
     }
     if (provider.thinkingDisabled) requestBody.thinking = { type: 'disabled' }
@@ -1233,11 +1276,13 @@ export async function handleLlmMessage(
       continue
     }
 
-    let content = assistantMessage.content ?? 'Чем ещё могу помочь с подбором?'
+    let content = stripTemplateOpener(assistantMessage.content?.trim() || 'Чем ещё могу помочь с подбором?')
     // Safety net for the tone: if the reply still talks like a program
-    // («система не отдаёт», «информации нет», «временный сбой»), rewrite it
-    // once as a live travel agent would say it.
-    const machineTalk = findMachineTalk(content)
+    // («система не отдаёт», «информации нет», «временный сбой», «не могу
+    // обработать запрос», a made-up phone), rewrite it once as a live travel
+    // agent would say it.
+    const allowedPhone = totusConfig().companyPhone
+    const machineTalk = findMachineTalk(content, { allowedPhone })
     if (machineTalk.length) {
       const rewritten = await humanizeReply(content, async (system, user) => {
         const body: Record<string, unknown> = {
@@ -1251,7 +1296,7 @@ export async function handleLlmMessage(
         if (provider.thinkingDisabled) body.thinking = { type: 'disabled' }
         const c = await callDeepSeek(client, body, session.lastPicks?.map((t) => t.name))
         return c.choices[0]?.message?.content ?? ''
-      })
+      }, { allowedPhone })
       logEvent({
         session: session.logId ?? 'unknown',
         kind: 'humanize',
@@ -1260,6 +1305,7 @@ export async function handleLlmMessage(
       })
       content = rewritten
     }
+    content = removeMadeUpPhones(content, allowedPhone)
     session.llmMessages.push({ role: 'assistant', content })
     session.history.push({ role: 'assistant', content })
     logEvent({ session: session.logId ?? 'unknown', kind: 'assistant', text: content })
@@ -1274,10 +1320,9 @@ export async function handleLlmMessage(
     return
   }
 
-  send(ws, {
-    type: 'error',
-    error: 'Слишком много шагов инструментов. Попробуйте ещё раз через минуту.',
-  })
+  // Not reachable in practice (the last round has tool_choice «none»), but
+  // the customer still gets a human reply, never a technical error.
+  await streamHumanReply(ws, session, fallbackReply('stuck'), messageId)
 }
 
 export function llmStatus() {

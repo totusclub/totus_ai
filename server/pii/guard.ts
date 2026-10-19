@@ -2,8 +2,9 @@
  * Personal-data guard for Mila — where the detector is applied.
  *
  *   1. Incoming chat message (WS `chat`): personal data → the message does
- *      not go anywhere, the customer gets a warning («уберите … и отправьте
- *      ещё раз»). Checked on the server: a modified client cannot skip it.
+ *      not go anywhere, the customer gets a warning in Mila's voice: what not
+ *      to write and a request to send the same message again without it.
+ *      Checked on the server: a modified client cannot skip it.
  *   2. Restored history (WS `restore`): every message is masked before it
  *      becomes model context.
  *   3. Every request to DeepSeek (`assertNoPiiInRequest`): a user message
@@ -53,15 +54,39 @@ function joinRu(items: string[]) {
   return `${items.slice(0, -1).join(', ')} и ${items[items.length - 1]}`
 }
 
-/** Mila's warning. The found value itself is never repeated. */
+const CONTACT_TYPES = new Set<PiiType>(['phone', 'email', 'profile'])
+const PAYMENT_TYPES = new Set<PiiType>(['card', 'account', 'secret'])
+const DOCUMENT_TYPES = new Set<PiiType>(['passport', 'inn', 'snils', 'birth_date', 'document'])
+
+/**
+ * Mila's warning, in her own voice (owner, 18.10: «она не терминал»): what
+ * not to write, why it is not needed, where a human is, and a request to send
+ * the same message again without it. The found value itself is never repeated.
+ */
 export function buildPiiWarning(types: PiiType[]): string {
-  const what = joinRu(types.map((t) => PII_WARNING_LABELS[t]))
-  return (
-    `Пожалуйста, уберите из сообщения личные данные${what ? ` — ${what}` : ''} — и отправьте его ещё раз. ` +
-    'Мне они не нужны, чтобы подобрать тур, поэтому это сообщение я не обработала. ' +
-    'Вместо имён и контактов достаточно написать, например: «двое взрослых и ребёнок 7 лет, вылет из Москвы в ноябре». ' +
-    'Бронирование оформляется на странице тура, а связаться с менеджером можно через звонок в поддержку в личном кабинете.'
+  const list = types.length ? types : (['name'] as PiiType[])
+  const onlyName = list.every((t) => t === 'name')
+  const what = joinRu(list.map((t) => PII_WARNING_LABELS[t]))
+  const parts: string[] = []
+  if (onlyName) {
+    parts.push('Давайте без имён 🙂 Для подбора тура они мне не нужны, а личные данные в этот чат лучше не писать.')
+  } else {
+    parts.push(`${what.charAt(0).toUpperCase()}${what.slice(1)} лучше в этот чат не писать 🙂 Для подбора тура мне это не нужно.`)
+  }
+  if (list.some((t) => CONTACT_TYPES.has(t))) {
+    parts.push('Сама я не звоню и не пишу — если хотите поговорить с человеком, мои коллеги на связи в личном кабинете: «Звонок в поддержку» или «Чат с поддержкой».')
+  } else if (list.includes('order')) {
+    parts.push('Заказами занимаются мои коллеги из поддержки — они на связи в личном кабинете: «Чат с поддержкой» или «Звонок в поддержку».')
+  } else {
+    if (list.some((t) => PAYMENT_TYPES.has(t))) parts.push('Оплата проходит только на защищённой странице тура, в чате она не нужна.')
+    if (list.some((t) => DOCUMENT_TYPES.has(t))) parts.push('Данные туристов указываются только при бронировании, на странице тура.')
+  }
+  parts.push(
+    onlyName
+      ? 'Напишите, пожалуйста, то же самое ещё раз, только без имени — например: «нас двое и ребёнок 7 лет, вылет из Москвы в ноябре» — и я сразу начну подбирать.'
+      : 'Напишите, пожалуйста, то же сообщение ещё раз, только без этого — и я сразу продолжу.',
   )
+  return parts.join(' ')
 }
 
 /** Types of personal data in a customer message (empty = may go on). */

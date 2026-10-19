@@ -12,7 +12,7 @@
  */
 import { AGENT_NAMES, LATIN_NAMES, NAME_FORMS } from './names.js'
 
-export const PII_RULES_VERSION = 'pii-2 · 2026-10-15'
+export const PII_RULES_VERSION = 'pii-3 · 2026-10-18'
 
 export type PiiType =
   | 'name'
@@ -452,7 +452,7 @@ function detectPatterns(a: string, out: Array<{ type: PiiType; s: number; e: num
 const PLACES = new Set(
   `виктория софия александрия доминика мадина марсель лара мира владимир пушкин ростов саратов киров
    псков тамбов азов королев чехов ржев тутаев берлин турин пекин харбин мессина аргентина украина
-   палестина герцеговина каролина кортина майя роза поляна лион`
+   палестина герцеговина каролина кортина майя роза поляна лион милан`
     .split(/\s+/)
     .filter(Boolean),
 )
@@ -463,12 +463,13 @@ const HOTEL_WORDS = new Set(
    resorts резорт клуб club palace палас пэлас beach бич spa спа suite suites сьют villa villas вилла виллы
    apart апарт apartments inn lodge deluxe делюкс collection коллекшн бей бэй bay garden гарден park парк
    plaza плаза royal роял grand гранд хутор санта сан сант сент святой святого святая св santa san saint
-   st mare маре boutique бутик residence резиденс village premium премиум дольче dolce вита vita lux люкс`
+   st mare маре boutique бутик residence резиденс village premium премиум дольче dolce вита vita lux люкс
+   карт карте карта carte`
     .split(/\s+/)
     .filter(Boolean),
 )
 /** Hotel / brand words that look like surnames. */
-const BRANDS = new Set(['кремлин', 'дельфин', 'delphin', 'риксос', 'rixos', 'титаник', 'titanic'])
+const BRANDS = new Set(['кремлин', 'дельфин', 'delphin', 'риксос', 'rixos', 'титаник', 'titanic', 'сони', 'sony'])
 
 const PATRONYMIC = /^[а-я]{3,}(?:ович|евич|ьич|овна|евна|ична|инична)(?:а|у|ем|ом|е|ы|ой|ою|ей)?$/
 const SURNAME =

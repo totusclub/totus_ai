@@ -38,7 +38,7 @@ function appendAflt(url: string) {
   }
 }
 
-export const BUILD_TAG = 'v41-human-tone · 2026-10-18'
+export const BUILD_TAG = 'v42-rooms-page · 2026-10-18'
 
 export function isLevelTravelEnabled() {
   const key = process.env.LEVEL_TRAVEL_API_KEY?.trim()
@@ -238,6 +238,8 @@ export class UnsupportedDestinationError extends Error {
 }
 
 const countriesFromApi = new Map<string, { country: string; city?: string; label: string }>()
+/** ISO2 → Russian country name from the reference book (for Mila's prompt). */
+const countryNamesRu = new Map<string, string>()
 
 export async function loadCountries(): Promise<number> {
   if (!isLevelTravelEnabled()) return 0
@@ -257,6 +259,8 @@ export async function loadCountries(): Promise<number> {
       if (!code || code.length !== 2) continue
       // Excluded destinations must not come back through the reference book.
       if (isExcludedCountry(code)) continue
+      const ru = pickString(rec.name_ru)
+      if (ru) countryNamesRu.set(code, ru)
       for (const alias of [rec.name_ru, rec.name, rec.name_en, rec.title, code]) {
         const a = pickString(alias)
         if (a) {
@@ -275,6 +279,20 @@ export async function loadCountries(): Promise<number> {
     console.warn(`[level.travel] countries reference unavailable: ${String(err)}`)
     return 0
   }
+}
+
+/**
+ * Russian names of the countries we sell tours to — Mila must not advise
+ * a country we do not sell (owner's 500-request run: Париж, Кения, Коста-Рика…).
+ * Empty until the reference book has loaded.
+ */
+export function supportedCountryNamesRu(): string[] {
+  const names = new Set<string>()
+  for (const c of supportedCountries()) {
+    const ru = countryNamesRu.get(c.country)
+    if (ru) names.add(ru)
+  }
+  return [...names].sort((a, b) => a.localeCompare(b, 'ru'))
 }
 
 /** Countries we can actually search — for diagnostics and for the assistant. */
@@ -821,7 +839,7 @@ function mapHotelToTour(
         description: desc.slice(0, 240),
       },
     ],
-    inclusions: inclusions.length ? inclusions : ['Проживание по пакету Level.Travel'],
+    inclusions: inclusions.length ? inclusions : ['Проживание по выбранному пакету'],
     exclusions: [],
     meeting_point: {
       address: destination,
@@ -833,7 +851,7 @@ function mapHotelToTour(
         ? row.cancellation_policy
         : asRecord(row.cancellation_policy)?.description,
       asRecord(row.cancellation_policy)?.text,
-      'Условия отмены — по правилам туроператора Level.Travel',
+      'Условия отмены — по правилам туроператора; точные условия видны на странице тура до оплаты',
     ),
     guide_languages: ['Russian', 'English'],
     available_dates: available_dates.slice(0, 20),

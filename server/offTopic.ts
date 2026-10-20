@@ -1,18 +1,25 @@
 /**
- * Mila talks only about travel, tours, hotels and the Totus Club platform.
+ * Mila talks only about travel, tours, hotels and the Totus Club platform —
+ * and never with a dry «это не ко мне».
  *
  * Owner, 20.10.2026: «почему ИИ отвечает на вопросы, не связанные с турами???
  * тестировщик спросил у него про рецепт борща, и он дал ему… отвечать только
  * на вопросы, связанные с нашей платформой, отдыхом и турами».
+ * Then: «нет такого сухого отказа… как хороший продавец, который креативно
+ * направит, и человек скажет: вау, какой крутой искусственный интеллект».
  *
- * Two layers on top of the prompt rule:
- *  1. offTopicKind() — a request that is clearly not travel (a recipe, a poem,
- *     homework, code…) never reaches the model: Mila declines in her own voice
- *     and brings the talk back to the trip.
- *  2. looksOffTopicAnswer() — if the model still wrote a recipe, a poem or
- *     code for a non-travel message, the reply is replaced the same way.
- * Both are high-precision: anything with travel context goes to the model,
- * which follows the prompt rule.
+ * So an off-topic request gets a creative bridge to a trip, not a refusal:
+ * «Свой фирменный рецепт я храню в секрете 😉 А вот где подают настоящий
+ * борщ…». The request itself (recipe, poem, homework, code) is not done.
+ *
+ *  1. offTopicKind() — the message is clearly not about travel. The model
+ *     gets bridgeInstruction() for this turn and writes the bridge itself,
+ *     picking up the customer's own topic.
+ *  2. looksOffTopicAnswer() / isDryRefusal() — if the model still wrote the
+ *     recipe, poem or code, or answered with a dry refusal, the reply is
+ *     replaced with a ready creative bridge (bridgeReply()).
+ * Both are high-precision: a message with travel context is a normal travel
+ * question («что попробовать в Грузии», «где поесть в Стамбуле»).
  */
 
 export type OffTopicKind = 'recipe' | 'creative' | 'homework' | 'code'
@@ -66,33 +73,74 @@ export function offTopicKind(text: string): OffTopicKind | null {
 
 const isEnglish = (text: string) => /[a-z]/i.test(text) && !/[а-яё]/i.test(text)
 
-const REPLIES: Record<OffTopicKind, string[]> = {
+const WHAT: Record<OffTopicKind, string> = {
+  recipe: 'рецепт или совет по готовке',
+  creative: 'стихи, песню, рассказ, поздравление или шутку',
+  homework: 'решить задачу или домашнее задание',
+  code: 'код или программу',
+}
+
+const IDEAS: Record<OffTopicKind, string> = {
+  recipe:
+    'где это блюдо или похожее лучше всего попробовать по-настоящему; страна, куда едут ради кухни; отель, которым гости хвалят кухню (название — только после поиска); «готовить в отпуске не придётся — всё включено»',
+  creative:
+    'место, которое само вдохновляет (закаты, море, старые улочки); для поздравления — подарить поездку вместо открытки; для истории про кота — страна, где кошки хозяева улиц',
+  homework: 'каникулы и семейный отдых — «после контрольной заслужили море»; страна, где историю или природу можно увидеть вживую',
+  code: 'отпуск от экрана и дедлайнов; тихое место у моря, где хорошо перезагрузиться',
+}
+
+/**
+ * The prompt section for this turn when the message is not about travel:
+ * do not fulfil it, do not refuse dryly — bridge to a trip creatively.
+ */
+export function bridgeInstruction(kind: OffTopicKind): string {
+  return [
+    '## Это сообщение не про путешествия',
+    `Клиент просит ${WHAT[kind]}. Это не твоя работа, поэтому сам ответ по сути не давай: ни целиком, ни кусочком, ни «вкратце». Но и не отказывай сухо — никаких «это не ко мне», «я не помогаю с этим», «я только про туры», «не могу помочь».`,
+    'Ответь как обаятельный, остроумный турагент и хороший продавец: подхвати тему клиента и сделай из неё креативный мостик к поездке, чтобы человек улыбнулся и подумал «вау, какой классный помощник». 2–3 живые фразы, в конце — лёгкий вопрос про поездку.',
+    `Идеи для мостика: ${IDEAS[kind]}.`,
+    'Пример на «дай рецепт борща»: «Свой фирменный рецепт я храню в секрете 😉 А вот где после дня у моря вас накормят так, что захочется добавки, подскажу с радостью. Куда бы махнули — поближе или к тёплому морю?»',
+    'Направления — только из списка стран, где у нас есть туры. Названия отелей не называй без поиска. Если уместно, покажи 2–3 направления по теме через `show_destinations`. Стихов, рецептов и кода не пиши даже в шутку.',
+  ].join('\n')
+}
+
+const BRIDGES: Record<OffTopicKind, string[]> = {
   recipe: [
-    'С рецептами я вам не помощница: я Мила, турагент «Тотус клуба», и всё моё — это поездки. Зато могу найти отель, где вкусно кормят, или тур туда, где хочется попробовать местную кухню. Куда бы вам хотелось?',
-    'Тут я пас, на кухне от меня толку мало 🙂 Я помогаю с путешествиями: подобрать тур или отель, подсказать, куда и когда лучше поехать. Планируете отдых?',
+    'Свой фирменный рецепт я храню в секрете 😉 А вот где вас накормят так, что захочется добавки, подскажу с радостью: в Турции мезе и кебабы, в Италии — паста, ради которой стоит лететь. Куда бы махнули?',
+    'Лучший рецепт отпуска у меня точно есть: тёплое море, «всё включено» и никакой готовки целую неделю. Хотите, подберу отель, где гостей особенно хвалят за кухню? Откуда полетите и когда?',
+    'Готовить я оставлю вам, а сама предложу то, что вкуснее любого рецепта: том ям на берегу в Таиланде или свежий фо во Вьетнаме. Махнём за вкусными впечатлениями — какая кухня вам ближе?',
   ],
   creative: [
-    'Стихи и тексты — не моё: я Мила, турагент «Тотус клуба», и помогаю только с поездками. А вот подобрать тур, отель или подсказать, куда лучше поехать в нужный месяц, могу с удовольствием. Куда думаете?',
-    'Писать стихи и рассказы я не берусь — я турагент и занимаюсь путешествиями. Если планируете отдых, расскажите, куда и когда хочется, и я подберу варианты.',
+    'Самые красивые строчки пишутся у моря на закате — я бы отправила вас за вдохновением, а не сочиняла за вас 😉 Куда тянет: к тёплому морю или в старинные города?',
+    'Вместо стихов могу подарить настоящую историю, которую потом захочется рассказывать: например, закат над Средиземным морем или белый песок Мальдив. Кого берём с собой в поездку?',
+    'Поздравление, которое точно запомнят, — это поездка, а не открытка. Подобрать тур в подарок — кто едет и примерно когда?',
   ],
   homework: [
-    'С учёбой помочь не смогу: я Мила, турагент «Тотус клуба», и моё дело — путешествия. Зато на каникулы могу подобрать отличный тур. Куда хотелось бы поехать?',
-    'Задачи и домашние задания — это не ко мне, я занимаюсь поездками. Если думаете об отдыхе, подскажу направление и подберу тур.',
+    'Задачки оставлю учителям, а сама решу задачу поинтереснее — куда поехать на каникулы, чтобы всем понравилось 🙂 Сколько вас будет и когда каникулы?',
+    'После уроков лучшая награда — море! Могу подобрать семейный отдых на каникулы: с аквапарком, детским клубом и тёплой водой. Откуда полетите и сколько лет детям?',
   ],
   code: [
-    'С программированием я не помогаю — я Мила, турагент «Тотус клуба», и занимаюсь только путешествиями. Если планируете поездку, расскажите, куда и когда хочется, и я подберу варианты.',
-    'Код — не моя история, я турагент. А вот с отдыхом помогу: подберу тур или отель, подскажу, куда лучше поехать. Что планируете?',
+    'Код подождёт, а вот отпуск от экрана, похоже, нужен уже сейчас 😉 Могу найти тихий отель у моря, где лучше всего перезагрузиться. Куда хочется и когда сможете вырваться?',
+    'Лучший апдейт для разработчика — неделя у моря без дедлайнов. Подобрать вариант — откуда полетите и на какие даты?',
   ],
 }
 
-const REPLY_EN =
-  "That's not something I can help with — I'm Mila, the travel agent at Totus Club, and I only help with trips: tours, hotels, where and when to go. Are you planning a holiday?"
+const BRIDGE_EN =
+  "I'll keep that one for the experts — but I know a great recipe for a holiday: warm sea, great food and zero cooking for a week 😉 Where would you like to go?"
 
-/** Mila's polite decline, in her voice, with a way back to the trip. */
-export function offTopicReply(kind: OffTopicKind, userText = '', seed = Date.now()): string {
-  if (isEnglish(userText)) return REPLY_EN
-  const list = REPLIES[kind]
+/** A ready creative bridge to a trip (when the model's own reply can't be used). */
+export function bridgeReply(kind: OffTopicKind, userText = '', seed = Date.now()): string {
+  if (isEnglish(userText)) return BRIDGE_EN
+  const list = BRIDGES[kind]
   return list[Math.abs(seed) % list.length]
+}
+
+/** «это не ко мне», «я только про туры» — a dry refusal the owner does not want. */
+const DRY =
+  /не (мо[её]|ко мне|мой профиль|моя (тема|история))(?![а-яё])|не помогаю|не могу (с этим |вам )?помочь|не смогу помочь|не берусь|я пас|не помощница|только (с|про|о) (поездк|путешеств|тур)|это не входит|не в моей компетенц|i can.?t help|not something i can/i
+
+export function isDryRefusal(text: string): boolean {
+  return DRY.test(text)
 }
 
 /**

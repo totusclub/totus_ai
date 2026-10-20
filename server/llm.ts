@@ -33,7 +33,7 @@ import { confirmFeatures, evidenceComment, researchHotel, type FeatureConfirmati
 import { fallbackReply, findMachineTalk, humanizeReply, removeMadeUpPhones, stripTemplateOpener } from './humanTone.js'
 import { assertNoPiiInRequest, guardContext } from './pii/guard.js'
 import { formatPlaybooks, selectPlaybooks } from './agentPlaybook.js'
-import { looksOffTopicAnswer, offTopicKind, offTopicReply } from './offTopic.js'
+import { bridgeInstruction, bridgeReply, isDryRefusal, looksOffTopicAnswer, offTopicKind } from './offTopic.js'
 
 export const TOUR_TOOLS: ChatCompletionTool[] = [
   {
@@ -1101,7 +1101,13 @@ export async function handleLlmMessage(
   const previousUser = [...session.history].reverse().find((m) => m.role === 'user')?.content ?? ''
   const playbooks = selectPlaybooks(userText, typeof previousUser === 'string' ? previousUser : '')
   if (playbooks.length) logEvent({ session: session.logId ?? 'unknown', kind: 'playbook', topics: playbooks.map((p) => p.id) })
-  const withPlaybooks = playbooks.length ? `${basePrompt}\n\n${formatPlaybooks(playbooks)}` : basePrompt
+  // Owner, 20.10.2026: only travel — and never a dry refusal. A clearly
+  // non-travel request (a recipe, a poem, homework, code) is not fulfilled:
+  // Mila picks up the topic and bridges to a trip creatively.
+  const offTopic = offTopicKind(userText)
+  if (offTopic) logEvent({ session: session.logId ?? 'unknown', kind: 'off_topic', found: [offTopic], changed: false })
+  const withTopics = playbooks.length && !offTopic ? `${basePrompt}\n\n${formatPlaybooks(playbooks)}` : basePrompt
+  const withPlaybooks = offTopic ? `${withTopics}\n\n${bridgeInstruction(offTopic)}` : withTopics
   const systemPrompt = session.contextNote
     ? `${withPlaybooks}\n\n## Контекст восстановленного диалога\n${session.contextNote}`
     : withPlaybooks
@@ -1116,16 +1122,6 @@ export async function handleLlmMessage(
 
   session.history.push({ role: 'user', content: userText })
   session.llmMessages.push({ role: 'user', content: userText })
-
-  // Owner, 20.10.2026: Mila talks only about travel, tours and Totus Club.
-  // A clearly non-travel request (a recipe, a poem, homework, code) does not
-  // go to the model: Mila declines in her own voice and offers the trip.
-  const offTopic = offTopicKind(userText)
-  if (offTopic) {
-    logEvent({ session: session.logId ?? 'unknown', kind: 'off_topic', found: [offTopic], changed: false })
-    await streamHumanReply(ws, session, offTopicReply(offTopic, userText), messageId)
-    return
-  }
 
   // Clear the per-turn search dedup cache so a legitimate new search in this
   // message can run; it only blocks identical repeats *within* the same turn.
@@ -1256,12 +1252,15 @@ export async function handleLlmMessage(
       content = rewritten
     }
     content = removeMadeUpPhones(content, allowedPhone)
-    // The model still answered off topic (wrote a recipe, a poem, code) —
-    // replace it with Mila's decline.
-    const offTopicAnswer = looksOffTopicAnswer(content, userText)
-    if (offTopicAnswer) {
-      logEvent({ session: session.logId ?? 'unknown', kind: 'off_topic', found: [offTopicAnswer], changed: true })
-      content = offTopicReply(offTopicAnswer, userText)
+    // The model still did the off-topic task (a recipe, a poem, code) or
+    // refused dryly («это не ко мне») — replace it with a ready creative
+    // bridge to a trip.
+    const offTopicAnswer = offTopic ? looksOffTopicAnswer(content, '') : looksOffTopicAnswer(content, userText)
+    const dry = Boolean(offTopic) && isDryRefusal(content)
+    if (offTopicAnswer || dry) {
+      const kind = offTopicAnswer ?? offTopic!
+      logEvent({ session: session.logId ?? 'unknown', kind: 'off_topic', found: [dry ? 'dry_refusal' : kind], changed: true })
+      content = bridgeReply(kind, userText)
     }
     session.llmMessages.push({ role: 'assistant', content })
     session.history.push({ role: 'assistant', content })

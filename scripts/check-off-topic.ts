@@ -4,7 +4,7 @@
  * Run: npx tsx scripts/check-off-topic.ts
  */
 import assert from 'node:assert/strict'
-import { looksOffTopicAnswer, offTopicKind, offTopicReply } from '../server/offTopic.ts'
+import { bridgeInstruction, bridgeReply, isDryRefusal, looksOffTopicAnswer, offTopicKind } from '../server/offTopic.ts'
 import { findMachineTalk } from '../server/humanTone.ts'
 import { buildTotusSystemPrompt } from '../server/totusPrompt.ts'
 
@@ -61,17 +61,44 @@ check('вопросы про поездку и платформу проходя
   ]) assert.equal(offTopicKind(q), null, q)
 })
 
-check('отказ — голосом Милы: тепло, без терминальных фраз, с возвратом к поездке', () => {
+check('готовый мостик: креативно, без сухого отказа, с вопросом про поездку', () => {
   for (const kind of ['recipe', 'creative', 'homework', 'code'] as const) {
-    for (const seed of [0, 1]) {
-      const r = offTopicReply(kind, 'дай рецепт', seed)
+    for (const seed of [0, 1, 2]) {
+      const r = bridgeReply(kind, 'дай рецепт', seed)
       assert.deepEqual(findMachineTalk(r), [], r)
-      assert.match(r, /поездк|путешеств|отдых|тур/i, r)
-      assert.ok(!/не могу обработать|не входит в мои функции|запрос/i.test(r), r)
+      assert.ok(!isDryRefusal(r), `сухой отказ: ${r}`)
+      assert.match(r, /поездк|отдых|тур|отел|море|махн|полетите|куда/i, r)
+      assert.match(r, /\?\s*$/, `в конце вопрос: ${r}`)
       assert.ok(r.length < 400, r)
+      assert.equal(looksOffTopicAnswer(r, ''), null, `мостик не похож на рецепт или стих: ${r}`)
     }
   }
-  assert.match(offTopicReply('recipe', 'give me a recipe'), /travel|trip|holiday/i)
+  assert.match(bridgeReply('recipe', 'give me a recipe'), /holiday|where would you like/i)
+})
+
+check('сухой отказ распознаётся — такой ответ заменяется', () => {
+  for (const t of [
+    'С рецептами я вам не помощница: я Мила, турагент.',
+    'Это не ко мне, я помогаю только с поездками.',
+    'Я не помогаю с программированием.',
+    'К сожалению, не могу с этим помочь.',
+    'Стихи — не моё.',
+  ]) assert.ok(isDryRefusal(t), t)
+  for (const t of [
+    'Свой фирменный рецепт я храню в секрете 😉 А вот где вас накормят так, что захочется добавки, подскажу. Куда бы махнули?',
+    'Подобрала пятёрки в Белеке. Какой ближе?',
+    'Возвратом занимаются мои коллеги из поддержки — напишите им в личном кабинете.',
+  ]) assert.ok(!isDryRefusal(t), t)
+})
+
+check('указание модели на этот шаг: мостик, без самого рецепта и без сухого отказа', () => {
+  const t = bridgeInstruction('recipe')
+  assert.match(t, /## Это сообщение не про путешествия/)
+  assert.match(t, /креативный мостик/)
+  assert.match(t, /не отказывай сухо/)
+  assert.match(t, /ответ по сути не давай/)
+  assert.match(t, /только из списка стран/)
+  for (const k of ['creative', 'homework', 'code'] as const) assert.ok(bridgeInstruction(k).length > 300, k)
 })
 
 check('страховка ответа: рецепт, стих и код в ответе ловятся', () => {
@@ -87,12 +114,15 @@ check('обычные ответы Милы страховка не трогае
   assert.equal(looksOffTopicAnswer('Я Мила — виртуальный турагент «Тотус клуба», работаю на искусственном интеллекте. Куда планируете?', 'ты бот?'), null)
 })
 
-check('промпт: только путешествия, без «коротко ответь» на посторонние темы', () => {
+check('промпт: только путешествия, креативный мостик вместо отказа', () => {
   const p = buildTotusSystemPrompt()
   assert.match(p, /## О чём ты говоришь \(правило владельца\)/)
   assert.match(p, /ТОЛЬКО на вопросы о путешествиях/)
   assert.match(p, /рецепты/)
   assert.ok(!/Тема не про путешествия — коротко и вежливо ответь/.test(p), 'старое разрешение отвечать на посторонние темы убрано')
+  assert.match(p, /Не отказывай сухо/)
+  assert.match(p, /креативный мостик к поездке/)
+  assert.ok(!/не помощница/.test(p), 'в примере нет сухого отказа')
   // Обязательные вопросы владельца (19.10) на месте.
   assert.match(p, /ВСЕГДА уточняет четыре вещи/)
   assert.match(p, /Одним живым сообщением/)

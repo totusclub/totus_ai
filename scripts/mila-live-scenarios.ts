@@ -16,12 +16,13 @@
  * answer to «ты бот?». Test messages contain no real personal data.
  */
 import { findMachineTalk } from '../server/humanTone.ts'
-import { looksOffTopicAnswer, offTopicKind } from '../server/offTopic.ts'
+import { isDryRefusal, looksOffTopicAnswer, offTopicKind } from '../server/offTopic.ts'
 
 /*
  * Правила владельца — каждый прогон оценивается и по ним, а не только по тону:
  *  1. Мила отвечает только про путешествия, туры, отели и Totus Club; рецепты,
- *     стихи, домашку, код — вежливо не делает и возвращает к поездке (20.10).
+ *     стихи, домашку, код не делает — и не отказывает сухо, а креативно
+ *     переводит на поездку, как хороший продавец (20.10).
  *  2. Перед подбором уточняет откуда, куда, когда и кто — одним сообщением (19.10).
  *  3. Номера не подбирает: страница отеля на totus.club + оператор (18.10).
  *  4. Поддержка — «Чат с поддержкой» / «Звонок в поддержку» в личном кабинете, без телефонов.
@@ -44,7 +45,7 @@ type Expect = {
   noPhone?: boolean
   room?: boolean // a question about a room
   asks?: RegExp // something is missing — the reply must ask for it
-  offTopic?: 'decline' | 'answer' // not about travel → decline; travel food question → a real answer
+  offTopic?: 'bridge' | 'answer' // not about travel → creative bridge to a trip; travel food question → a real answer
 }
 type Scenario = { name: string; turns: Array<[string, Expect?]> }
 
@@ -70,11 +71,11 @@ const SCENARIOS: Scenario[] = [
   { name: 'номер', turns: [['расскажи про отель Rixos Premium Belek'], ['а какие там номера и есть ли в номере ванна?', { room: true }]] },
   { name: 'кроватка', turns: [['Можно подобрать отель, где детская кроватка именно с жёстким матрасом? Ребёнку девять месяцев, хотим в Турцию в июне', { room: true }]] },
   { name: 'ереван', turns: [['Летим из Еревана с ребёнком семи месяцев, хотим в Египет в декабре', { asks: /(москв|петербург|казан|из какого)/i }]] },
-  { name: 'борщ', turns: [['дай рецепт борща', { offTopic: 'decline' }]] },
-  { name: 'стих', turns: [['напиши стихотворение про кота', { offTopic: 'decline' }]] },
-  { name: 'домашка', turns: [['реши задачу: поезд едет 60 км/ч, сколько он проедет за 3 часа', { offTopic: 'decline' }]] },
-  { name: 'код', turns: [['напиши код на python для сортировки списка', { offTopic: 'decline' }]] },
-  { name: 'посреди-подбора', turns: [['хочу в турцию в ноябре'], ['кстати, как сварить плов?', { offTopic: 'decline' }]] },
+  { name: 'борщ', turns: [['дай рецепт борща', { offTopic: 'bridge' }]] },
+  { name: 'стих', turns: [['напиши стихотворение про кота', { offTopic: 'bridge' }]] },
+  { name: 'домашка', turns: [['реши задачу: поезд едет 60 км/ч, сколько он проедет за 3 часа', { offTopic: 'bridge' }]] },
+  { name: 'код', turns: [['напиши код на python для сортировки списка', { offTopic: 'bridge' }]] },
+  { name: 'посреди-подбора', turns: [['хочу в турцию в ноябре'], ['кстати, как сварить плов?', { offTopic: 'bridge' }]] },
   { name: 'еда-в-поездке', turns: [['что обязательно попробовать из еды в Грузии?', { offTopic: 'answer' }]] },
   { name: 'ещё-варианты', turns: [['в турцию с детьми'], ['дети 4 и 7, вылет из Москвы в начале ноября на неделю', { search: true }], ['а покажи ещё варианты']] },
 ]
@@ -159,12 +160,13 @@ function problems(turn: Turn, expect: Expect = {}): string[] {
   if (expect.room && !ROOM_OK.test(turn.text)) p.push('вопрос про номер: нет страницы отеля и оператора')
   if (PROMISE.test(turn.text)) p.push(`обещает сама: «${turn.text.match(PROMISE)![0]}»`)
   if (/\*\*|^#{1,3}\s|^\s*[-*]\s/m.test(turn.text)) p.push('markdown')
-  if (expect.offTopic === 'decline') {
+  if (expect.offTopic === 'bridge') {
     const kind = looksOffTopicAnswer(turn.text, '')
-    if (kind) p.push(`ответила не по теме (${kind}) — должна вернуть к поездке`)
-    if (!/поездк|путешеств|отдых|тур|отел/i.test(turn.text)) p.push('не по теме: не вернула разговор к поездке')
+    if (kind) p.push(`выполнила постороннюю просьбу (${kind}) — нужен мостик к поездке`)
+    if (isDryRefusal(turn.text)) p.push('сухой отказ — нужен креативный мостик к поездке')
+    if (!/поездк|путешеств|отдых|тур|отел|море|махн|куда|направлен/i.test(turn.text)) p.push('не по теме: не перевела разговор на поездку')
   }
-  if (expect.offTopic === 'answer' && DECLINE.test(turn.text)) p.push('отказала, хотя вопрос про поездку')
+  if (expect.offTopic === 'answer' && (DECLINE.test(turn.text) || isDryRefusal(turn.text))) p.push('отказала, хотя вопрос про поездку')
   return p
 }
 
@@ -195,7 +197,7 @@ if (FILE) {
   const counts = new Map<string, number>()
   await pool(items, PAR, async (it) => {
     const [t] = await runDialogue([it.q])
-    const pr = problems(t, { room: ROOM_Q.test(it.q), offTopic: offTopicKind(it.q) ? 'decline' : undefined })
+    const pr = problems(t, { room: ROOM_Q.test(it.q), offTopic: offTopicKind(it.q) ? 'bridge' : undefined })
     if (pr.length) bad++
     for (const x of pr) counts.set(x.replace(/«.*»/, '«…»'), (counts.get(x.replace(/«.*»/, '«…»')) ?? 0) + 1)
     console.log(`#${it.n} › ${it.q.slice(0, 140)}`)

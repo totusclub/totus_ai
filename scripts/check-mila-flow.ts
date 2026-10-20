@@ -389,4 +389,37 @@ await check('опыт турагента: тема сообщения попад
   assert.ok(!/Опыт турагента/.test(String(((llmBodies[b2].messages as Json[])[0]).content)))
 })
 
+await check('посторонняя тема (рецепт борща, стих): модель не вызывается, Мила вежливо возвращает к поездке (владелец, 20.10)', async () => {
+  for (const q of ['дай рецепт борща', 'напиши стихотворение про кота']) {
+    const before = llmBodies.length
+    script = []
+    const a = fakeWs()
+    await handleLlmMessage(a.ws as never, createSession(), q, deps)
+    assert.equal(llmBodies.length, before, `${q}: в модель не ушло`)
+    const t = text(a.events)
+    assert.match(t, /поездк|путешеств|отдых|тур/i, t)
+    assert.ok(!/свекл|свёкл|капуст|мяу|котик/i.test(t), t)
+    assert.ok(!a.events.some((e) => e.type === 'error'))
+    assert.ok(a.events.some((e) => e.type === 'done'))
+  }
+})
+
+await check('модель всё-таки написала рецепт — клиенту уходит отказ, а не рецепт', async () => {
+  script = [{ content: 'Борщ просто!\nИнгредиенты: 500 г говядины, 2 свёклы, 300 г капусты, 3 картофелины.\nВарите бульон 1,5 часа.' }]
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, createSession(), 'а чем борщ отличается от щей?', deps)
+  const t = text(a.events)
+  assert.ok(!/говядин|свёкл/.test(t), t)
+  assert.match(t, /поездк|путешеств|отдых|тур/i, t)
+})
+
+await check('вопрос про еду в поездке — обычный ответ модели, не отказ', async () => {
+  script = [{ content: 'В Грузии обязательно попробуйте хинкали и хачапури по-аджарски. Планируете поездку — подскажите, из какого города и когда?' }]
+  const before = llmBodies.length
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, createSession(), 'что обязательно попробовать из еды в Грузии?', deps)
+  assert.equal(llmBodies.length, before + 1)
+  assert.match(text(a.events), /хинкали/)
+})
+
 console.log(`check-mila-flow: ${passed} passed`)

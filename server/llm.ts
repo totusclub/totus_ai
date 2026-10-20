@@ -33,6 +33,7 @@ import { confirmFeatures, evidenceComment, researchHotel, type FeatureConfirmati
 import { fallbackReply, findMachineTalk, humanizeReply, removeMadeUpPhones, stripTemplateOpener } from './humanTone.js'
 import { assertNoPiiInRequest, guardContext } from './pii/guard.js'
 import { formatPlaybooks, selectPlaybooks } from './agentPlaybook.js'
+import { looksOffTopicAnswer, offTopicKind, offTopicReply } from './offTopic.js'
 
 export const TOUR_TOOLS: ChatCompletionTool[] = [
   {
@@ -1116,6 +1117,16 @@ export async function handleLlmMessage(
   session.history.push({ role: 'user', content: userText })
   session.llmMessages.push({ role: 'user', content: userText })
 
+  // Owner, 20.10.2026: Mila talks only about travel, tours and Totus Club.
+  // A clearly non-travel request (a recipe, a poem, homework, code) does not
+  // go to the model: Mila declines in her own voice and offers the trip.
+  const offTopic = offTopicKind(userText)
+  if (offTopic) {
+    logEvent({ session: session.logId ?? 'unknown', kind: 'off_topic', found: [offTopic], changed: false })
+    await streamHumanReply(ws, session, offTopicReply(offTopic, userText), messageId)
+    return
+  }
+
   // Clear the per-turn search dedup cache so a legitimate new search in this
   // message can run; it only blocks identical repeats *within* the same turn.
   session.lastSearchSignature = undefined
@@ -1245,6 +1256,13 @@ export async function handleLlmMessage(
       content = rewritten
     }
     content = removeMadeUpPhones(content, allowedPhone)
+    // The model still answered off topic (wrote a recipe, a poem, code) —
+    // replace it with Mila's decline.
+    const offTopicAnswer = looksOffTopicAnswer(content, userText)
+    if (offTopicAnswer) {
+      logEvent({ session: session.logId ?? 'unknown', kind: 'off_topic', found: [offTopicAnswer], changed: true })
+      content = offTopicReply(offTopicAnswer, userText)
+    }
     session.llmMessages.push({ role: 'assistant', content })
     session.history.push({ role: 'assistant', content })
     logEvent({ session: session.logId ?? 'unknown', kind: 'assistant', text: content })

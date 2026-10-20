@@ -18,7 +18,7 @@ import { maskDeep, maskPii } from './pii/detect.js'
 const LOG_DIR =
   process.env.TOTUS_LOG_DIR?.trim() || path.join(os.homedir(), '.totus-chat-logs')
 
-export type LogKind = 'user' | 'assistant' | 'tool' | 'error' | 'humanize' | 'pii_blocked' | 'playbook'
+export type LogKind = 'user' | 'assistant' | 'tool' | 'error' | 'humanize' | 'pii_blocked' | 'playbook' | 'off_topic'
 
 export interface LogEntry {
   ts: string

@@ -5,6 +5,7 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 import type { BookingRequest, BookingResponse, Tour } from './types.js'
 import { checkUserText, guardContext, maskForContext, PiiBlockedError, sendPiiWarning } from './pii/guard.js'
 import { fallbackReply } from './humanTone.js'
+import { normalizeQuickPrompt } from './quickPrompts.js'
 
 export type BookingStep =
   | 'idle'
@@ -279,6 +280,8 @@ export async function handleAssistantMessage(
     return
   }
   session.lastUserText = userText
+  // Старая кнопка «Совет куда ехать» с «в сентябре» — без месяца (владелец, 21.10).
+  userText = normalizeQuickPrompt(userText)
 
   const { isLlmEnabled, handleLlmMessage } = await import('./llm.js')
   if (isLlmEnabled()) {

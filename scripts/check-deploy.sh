@@ -95,7 +95,7 @@ PORT="$(cat "$PORT_FILE")"
 
 export DEPLOY_ROOT="$ROOT" PM2_BIN="$T/fakebin/pm2" DEPLOY_LEGACY_DIR="$T/legacy" \
   DEPLOY_HEALTH_URL="http://127.0.0.1:$PORT/api/health" DEPLOY_WEB_URL="http://127.0.0.1:$PORT/web" \
-  DEPLOY_HEALTH_TIMEOUT=6 DEPLOY_KEEP=3
+  DEPLOY_HEALTH_TIMEOUT=6 DEPLOY_KEEP=3 DEPLOY_JWT_SOURCE="$T/no-api.env"
 D="$ROOT/bin/deploy.sh"
 run() { "$D" "$@" >"$T/out" 2>&1; }
 cur() { cat "$(readlink -f "$ROOT/current")/REVISION"; }
@@ -167,6 +167,20 @@ run deploy "$S6" || { cat "$T/out"; die "после добавления пер�
 [ "$(cur)" = "$S6" ] || die "current → коммит с переменной"
 ok "новая переменная: стоп с понятной причиной, после добавления — выкладка"
 
+# 6б. JWT_SECRET не совпадает с totus_API — стоп до переключения, Мила не тронута.
+printf 'JWT_SECRET=api-secret\n' >"$T/api.env"
+printf 'A=1\nNEW_KEY=2\nJWT_SECRET=old-secret\n' >"$ROOT/shared/.env"
+S6B="$(commit server/app.txt v6b)"
+if DEPLOY_JWT_SOURCE="$T/api.env" run deploy "$S6B"; then die "при разных JWT_SECRET выкладка должна остановиться"; fi
+grep -q 'JWT_SECRET' "$T/out" || die "причина: JWT_SECRET"
+grep -q 'api-secret\|old-secret' "$T/out" && die "значения ключа не печатаются"
+[ "$(cur)" = "$S6" ] || die "прод не тронут"
+printf 'A=1\nNEW_KEY=2\nJWT_SECRET=api-secret\n' >"$ROOT/shared/.env"
+DEPLOY_JWT_SOURCE="$T/api.env" run deploy "$S6B" || { cat "$T/out"; die "с одинаковым ключом выкладка проходит"; }
+S6_PREV="$S6"
+S6="$S6B"
+ok "JWT_SECRET не как у totus_API — стоп до переключения, значения не печатаются"
+
 # 7. Повтор и старый коммит из очереди — ничего не делаем.
 run deploy "$S6" && grep -q 'уже на проде' "$T/out" || die "повтор того же коммита"
 run deploy "$S2" && grep -q 'более новая версия' "$T/out" || die "старый коммит не ставится поверх нового"
@@ -175,8 +189,8 @@ ok "тот же или более старый коммит — пропуск"
 
 # 8. Ручной откат.
 run rollback || { cat "$T/out"; die "откат"; }
-[ "$(cur)" = "$S3" ] || die "rollback → прошлый удачный релиз"
-run status && grep -q "$S3" "$T/out" || die "status показывает коммит"
+[ "$(cur)" = "$S6_PREV" ] || die "rollback → прошлый удачный релиз"
+run status && grep -q "$S6_PREV" "$T/out" || die "status показывает коммит"
 ok "rollback и status"
 
 # 9. Храним не больше KEEP удачных релизов и один неудачный.

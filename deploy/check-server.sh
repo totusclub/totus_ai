@@ -31,6 +31,15 @@ if [ -f "$ENV" ]; then
   miss="$(comm -23 <(names "$LEGACY/.env") <(names "$ENV") | tr '\n' ' ')"
   [ -z "${miss// /}" ] && ok "в shared/.env есть все переменные из старого $LEGACY/.env" \
     || bad "в shared/.env нет переменных из старого .env: $miss" "добавьте их в $ENV"
+  api_env=/home/kedam_API/.env
+  jv() { grep -E "^$1=" "$2" 2>/dev/null | tail -n 1 | cut -d= -f2- | sed -E "s/^[\"']//; s/[\"']$//"; }
+  if [ -f "$api_env" ]; then
+    if [ -n "$(jv JWT_SECRET "$ENV")" ] && [ "$(jv JWT_SECRET "$ENV")" = "$(jv JWT_SECRET "$api_env")" ]; then
+      ok "JWT_SECRET в shared/.env совпадает с totus_API — Мила узнаёт пользователей"
+    else
+      bad "JWT_SECRET в shared/.env НЕ совпадает с $api_env — «Мои чаты» не загружаются и не сохраняются" "перенесите JWT_SECRET из $api_env в $ENV и: pm2 restart totus-ai-api"
+    fi
+  fi
   if cmp -s "$LEGACY/.env" "$ENV"; then ok "shared/.env совпадает со старым .env"; else
     warn "shared/.env отличается от $LEGACY/.env" "нормально, если правили shared/.env после настройки; если правили старый — скопируйте: install -m 600 $LEGACY/.env $ENV"
   fi

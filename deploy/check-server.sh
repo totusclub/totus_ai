@@ -82,6 +82,8 @@ if [ -n "$line" ]; then
     "command=\"$ROOT/bin/deploy-entry.sh\""*no-pty*no-port-forwarding*) ok "ключ ограничен: только deploy-entry.sh, без шелла и проброса портов" ;;
     *) bad "ключ GitHub Actions НЕ ограничен командой" "удалите строку «totus-ai github-actions» из $AK и запустите setup-server.sh заново" ;;
   esac
+  fp="$(grep -o 'ssh-ed25519 [A-Za-z0-9+/=]*' <<<"$line" | ssh-keygen -lf - 2>/dev/null | cut -d' ' -f1-2)"
+  [ -n "$fp" ] && echo "     отпечаток ключа Actions: $fp — должен совпасть с отпечатком в шаге «Проверка настроек выкладки» в GitHub Actions"
   [ "$(grep -c 'totus-ai github-actions' "$AK")" = 1 ] || warn "ключей «totus-ai github-actions» несколько" "оставьте одну строку — ту, что в GitHub secret DEPLOY_SSH_KEY"
 else
   bad "нет ключа GitHub Actions в authorized_keys" "bash $LEGACY/deploy/setup-server.sh"

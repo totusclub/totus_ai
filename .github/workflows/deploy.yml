@@ -56,15 +56,42 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - name: SSH-ключ выкладки
+      # Каждая причина сбоя — отдельной понятной ошибкой (::error::): её видно
+      # в сводке запуска и через API, без открытия полного лога.
+      - name: Проверка настроек выкладки
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
         run: |
+          fail=0
+          err() { echo "::error title=$1::$2"; fail=1; }
+          [ -n "$DEPLOY_HOST" ] || err "Нет DEPLOY_HOST" "Settings → Secrets and variables → Actions → Variables: DEPLOY_HOST = 109.73.206.121"
+          [ -n "$DEPLOY_SSH_KEY" ] || err "Нет DEPLOY_SSH_KEY" "Secrets: закрытый ключ из вывода deploy/setup-server.sh, целиком со строками BEGIN/END"
+          [ -n "$DEPLOY_KNOWN_HOSTS" ] || err "Нет DEPLOY_KNOWN_HOSTS" "Secrets: строки «109.73.206.121 ssh-…» из вывода deploy/check-server.sh"
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          if [ -n "$DEPLOY_SSH_KEY" ]; then
+            if pub="$(ssh-keygen -y -f ~/.ssh/deploy_key 2>/dev/null)"; then
+              echo "Ключ выкладки: $(printf '%s\n' "$pub" | ssh-keygen -lf - | cut -d' ' -f1-2) — должен совпасть с отпечатком в deploy/check-server.sh"
+            else
+              err "DEPLOY_SSH_KEY не читается" "скопируйте закрытый ключ заново целиком, вместе со строками -----BEGIN/END OPENSSH PRIVATE KEY-----"
+            fi
+          fi
+          if [ -n "$DEPLOY_HOST" ] && [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            ssh-keygen -F "$DEPLOY_HOST" -f ~/.ssh/known_hosts >/dev/null \
+              || err "В DEPLOY_KNOWN_HOSTS нет сервера $DEPLOY_HOST" "строки должны начинаться с «$DEPLOY_HOST ssh-…» — возьмите их из вывода deploy/check-server.sh"
+          fi
+          if [ -n "$DEPLOY_HOST" ]; then
+            if timeout 15 bash -c "</dev/tcp/$DEPLOY_HOST/22" 2>/dev/null; then
+              echo "Порт 22 на $DEPLOY_HOST доступен из GitHub"
+            else
+              err "GitHub не может подключиться к $DEPLOY_HOST:22" "сервер не пускает облачные машины GitHub (фильтр, файрвол, хостинг) — тогда включаем запасной вариант: сервер сам проверяет GitHub"
+            fi
+          fi
+          exit $fail
       - name: Команда на сервер
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
@@ -76,6 +103,23 @@ jobs:
             *) echo "неизвестное действие $ACTION"; exit 2 ;;
           esac
           echo "→ $CMD"
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+          set +e
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes \
               -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
-              "root@$DEPLOY_HOST" "$CMD"
+              "root@$DEPLOY_HOST" "$CMD" > >(tee /tmp/out.txt) 2> >(tee /tmp/err.txt >&2)
+          code=$?
+          sleep 1
+          if [ "$code" = 255 ]; then
+            msg="$(grep -v '^[[:space:]]*$' /tmp/err.txt | tail -n 3 | tr '\n' ' ')"
+            case "$msg" in
+              *"Host key verification failed"*|*"REMOTE HOST IDENTIFICATION"*) hint="DEPLOY_KNOWN_HOSTS не совпадает с ключом сервера — возьмите строки из deploy/check-server.sh" ;;
+              *"Permission denied"*) hint="сервер не принял ключ: открытая часть DEPLOY_SSH_KEY должна быть в /root/.ssh/authorized_keys (сверьте отпечатки в этом шаге и в deploy/check-server.sh)" ;;
+              *"timed out"*|*"Connection refused"*|*"No route"*) hint="нет связи с сервером по SSH из GitHub — запасной вариант: сервер сам проверяет GitHub" ;;
+              *) hint="см. полный лог шага" ;;
+            esac
+            echo "::error title=SSH: не удалось зайти на сервер::$msg → $hint"
+          elif [ "$code" != 0 ]; then
+            reason="$(grep 'ОШИБКА' /tmp/out.txt | tail -n 1)"
+            echo "::error title=Выкладка на сервере не удалась (код $code)::${reason:-см. лог шага и /srv/totus/ai/deploy.log}"
+          fi
+          exit "$code"

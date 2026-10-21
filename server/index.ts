@@ -4,6 +4,8 @@ import express from 'express'
 import { createServer } from 'http'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { randomUUID } from 'crypto'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { SCHEMA_TABLES } from './data.js'
 import { handleAssistantMessage, createSession, type Session, seedRestoredSession, sendHumanText } from './assistant.js'
 import { fallbackReply } from './humanTone.js'
@@ -106,6 +108,19 @@ function findTour(id: string) {
   return getCachedTour(id)
 }
 
+/**
+ * Commit of this release. deploy/deploy.sh writes it into REVISION in the
+ * release folder; the deploy waits until /api/health reports the new commit.
+ * null when the server runs outside a release (local dev, the old folder).
+ */
+const COMMIT = (() => {
+  try {
+    return readFileSync(path.join(process.cwd(), 'REVISION'), 'utf8').trim() || null
+  } catch {
+    return null
+  }
+})()
+
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
@@ -118,6 +133,7 @@ app.get('/api/health', (_req, res) => {
     levelTravel: levelTravelStatus(),
     // Deployed version marker (STATUS D3): changes with every server release.
     build: BUILD_TAG,
+    commit: COMMIT,
     // Personal data never goes to the model; version of the detection rules.
     pii: { guard: 'enforce', rules: PII_RULES_VERSION },
   })

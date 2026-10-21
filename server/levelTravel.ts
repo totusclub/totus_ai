@@ -38,7 +38,7 @@ function appendAflt(url: string) {
   }
 }
 
-export const BUILD_TAG = 'v46-no-september · 2026-10-21'
+export const BUILD_TAG = 'v47-advice-button · 2026-10-21'
 
 export function isLevelTravelEnabled() {
   const key = process.env.LEVEL_TRAVEL_API_KEY?.trim()

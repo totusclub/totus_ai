@@ -235,7 +235,7 @@ await check('сообщение с телефоном и именем не ух�
   assert.ok(a.events.some((e) => e.type === 'done'))
   assert.equal(s.history.length, 0, 'в сессию не попало')
   const log = JSON.stringify(readRecentLog(50))
-  assert.ok(log.includes('pii_blocked') && !/Смирнова|916/.test(log), 'в журнале только тип')
+  assert.ok(log.includes('pii_blocked') && !/Смирнова|123-45-67|916 123/.test(log), 'в журнале только тип')
 })
 
 await check('после исправления то же сообщение без данных уходит как обычно', async () => {

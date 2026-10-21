@@ -22,6 +22,9 @@ KEEP="${DEPLOY_KEEP:-3}"
 # Папка, из которой Мила работала до автовыкладки: к ней возвращаемся, если
 # самая первая выкладка не поднялась.
 LEGACY="${DEPLOY_LEGACY_DIR:-/home/totus_ai_v2}"
+# Где выпускаются токены входа (totus_API). JWT_SECRET Милы обязан совпадать с ним,
+# иначе Мила не узнаёт пользователей и «Мои чаты» не сохраняются (так было 21.10).
+JWT_SOURCE="${DEPLOY_JWT_SOURCE:-/home/kedam_API/.env}"
 APPS=(totus-ai-api totus-ai-web)
 
 REPO="$ROOT/repo.git"
@@ -67,6 +70,7 @@ trap 'log "ОШИБКА: строка $LINENO, команда: $BASH_COMMAND"; n
 
 current_release() { [ -L "$CURRENT" ] && readlink -f "$CURRENT" || true; }
 revision_of() { cat "$1/REVISION" 2>/dev/null || true; }
+env_value() { grep -E "^$1=" "$2" 2>/dev/null | tail -n 1 | cut -d= -f2- | sed -E "s/^[\"']//; s/[\"']$//"; }
 env_names() { grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$1" 2>/dev/null | cut -d= -f1 | sort -u; }
 
 switch_to() {
@@ -198,6 +202,13 @@ cmd_deploy() {
   if [ -n "${missing// /}" ]; then
     rm -rf "$rel"
     fail "в $SHARED/.env нет переменных: ${missing% } — добавьте их и запустите выкладку ещё раз (Мила не тронута)"
+  fi
+
+  # Ключ входа тот же, что у totus_API (значения не печатаются).
+  if [ -f "$JWT_SOURCE" ] && [ -n "$(env_value JWT_SECRET "$JWT_SOURCE")" ] \
+    && [ "$(env_value JWT_SECRET "$SHARED/.env")" != "$(env_value JWT_SECRET "$JWT_SOURCE")" ]; then
+    rm -rf "$rel"
+    fail "JWT_SECRET в $SHARED/.env не совпадает с $JWT_SOURCE — Мила не узнает пользователей и не сохранит их чаты. Перенесите значение из $JWT_SOURCE и запустите выкладку ещё раз (Мила не тронута)"
   fi
 
   if [ -n "$prev" ] && [ -d "$prev/node_modules" ] && cmp -s "$prev/package-lock.json" "$rel/package-lock.json"; then

@@ -1,0 +1,81 @@
+# Проверки на каждый PR и выкладка Милы на сервер после слияния в main.
+# Как устроено и как включить — docs/AVTODEPLOY.md.
+# Выкладка включается переменной репозитория DEPLOY_ENABLED=true; пока её нет —
+# только проверки.
+name: Проверки и выкладка
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'deploy — выложить последний main; rollback — вернуть прошлый релиз; status — что на проде'
+        type: choice
+        options: [deploy, rollback, status]
+        default: status
+
+# Выкладки идут строго по очереди, проверки PR — каждая своя.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Проверки
+    if: github.event_name != 'workflow_dispatch' || inputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20 # как на сервере
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: npm run check (поведение Милы, защита данных, тон, тест выкладки)
+        run: npm run check
+      - name: Типы сервера
+        run: npm run typecheck:server
+      - name: Сборка
+        run: npm run build
+
+  deploy:
+    name: Выкладка на сервер
+    needs: check
+    if: >-
+      always() &&
+      vars.DEPLOY_ENABLED == 'true' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      (needs.check.result == 'success' || (needs.check.result == 'skipped' && inputs.action != 'deploy'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: SSH-ключ выкладки
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Команда на сервер
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          ACTION: ${{ github.event_name == 'push' && 'deploy' || inputs.action }}
+        run: |
+          case "$ACTION" in
+            deploy) CMD="deploy $GITHUB_SHA" ;;
+            rollback|status) CMD="$ACTION" ;;
+            *) echo "неизвестное действие $ACTION"; exit 2 ;;
+          esac
+          echo "→ $CMD"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+              "root@$DEPLOY_HOST" "$CMD"

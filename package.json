@@ -23,7 +23,8 @@
     "publish:assistant-native:git": "bash scripts/publish-ai-assistant-native-git.sh",
     "lint": "oxlint",
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
-    "check": "tsx scripts/check-pii.ts && tsx scripts/check-hotel-facts.ts && tsx scripts/check-human-tone.ts && tsx scripts/check-mila-flow.ts && tsx scripts/check-playbook.ts && tsx scripts/check-off-topic.ts",
+    "check": "tsx scripts/check-pii.ts && tsx scripts/check-hotel-facts.ts && tsx scripts/check-human-tone.ts && tsx scripts/check-mila-flow.ts && tsx scripts/check-playbook.ts && tsx scripts/check-off-topic.ts && bash scripts/check-deploy.sh",
+    "check:deploy": "bash scripts/check-deploy.sh",
     "pii:scrub": "tsx scripts/pii-scrub-storage.ts",
     "mila:live": "tsx scripts/mila-live-scenarios.ts",
     "playbook:build": "node scripts/build-playbook.mjs"

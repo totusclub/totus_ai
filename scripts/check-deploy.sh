@@ -57,6 +57,8 @@ cat >"$T/fakebin/pm2" <<EOF
 case "\$1" in
   delete) sed -i "/^\$2 /d" "$STATE"; exit 0 ;;
   start) echo "\$4 \$(pwd -P)" >>"$STATE" ;;
+  -v) echo 7.0.1 ;;
+  jlist) node -e 'const fs=require("fs");const m=new Map();for(const l of fs.readFileSync(process.argv[1],"utf8").split("\\n")){const i=l.indexOf(" ");if(i>0)m.set(l.slice(0,i),l.slice(i+1))}console.log(JSON.stringify([...m].map(([name,cwd])=>({name,pm2_env:{pm_cwd:cwd,status:"online"}}))))' "$STATE" ;;
 esac
 exit 0
 EOF
@@ -183,6 +185,15 @@ good="$(find "$ROOT/releases" -mindepth 1 -maxdepth 1 -type d ! -name '*.failed'
 bad="$(find "$ROOT/releases" -mindepth 1 -maxdepth 1 -type d -name '*.failed' | wc -l)"
 [ "$good" -le 3 ] && [ "$bad" -le 1 ] || die "релизов: удачных $good, неудачных $bad"
 ok "старые релизы чистятся (удачных ≤ 3, неудачных ≤ 1)"
+
+# 9б. Проверка сервера (deploy/check-server.sh) видит рабочую выкладку.
+PATH="$T/fakebin:$PATH" DEPLOY_LEGACY_DIR="$W" bash "$SRC/deploy/check-server.sh" >"$T/out" 2>&1 || true
+for want in "totus-ai-api работает из текущего релиза" "totus-ai-web работает из текущего релиза" \
+  "/api/health отвечает коммитом текущего релиза" "Мила отвечает: модель, Level.Travel и база подключены" "Ничего не изменено"; do
+  grep -qF "$want" "$T/out" || { cat "$T/out"; die "check-server: нет «$want»"; }
+done
+grep -q "работает не из текущего релиза" "$T/out" && die "check-server: ложная ошибка про релиз"
+ok "check-server.sh видит, что Мила работает из текущего релиза и отвечает его коммитом"
 
 # 10. Первая выкладка, которая не поднялась, — возврат на старую папку.
 ROOT2="$T/srv2"

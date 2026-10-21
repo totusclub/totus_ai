@@ -65,7 +65,7 @@ export function formatPlaybooks(list: Playbook[]): string {
   if (!list.length) return ''
   const blocks = list.map((p) => {
     const lines = [`### ${p.title}`]
-    if (p.ask.length) lines.push(`Что ещё уточнить (кроме города вылета, дат и состава): ${p.ask.join('; ')}.`)
+    if (p.ask.length) lines.push(`Что ещё можно уточнить (кроме города вылета, дат и состава) — в ТОМ ЖЕ одном сообщении с ними, не отдельной анкетой, самое важное: ${p.ask.join('; ')}.`)
     if (p.advise.length) lines.push('Как советует опытный турагент:', ...p.advise.map((x) => `- ${x}`))
     if (p.facts.length) lines.push('Факты (говори осторожно, правила меняются):', ...p.facts.map((f) => `- ${f.text}`))
     if (p.operator.length) lines.push(`Что подтверждает наш оператор у отеля или авиакомпании: ${p.operator.join('; ')}.`)

@@ -113,6 +113,7 @@ const { handleLlmMessage } = await import('../server/llm.ts')
 const { createSession, handleAssistantMessage, seedRestoredSession } = await import('../server/assistant.ts')
 const { trimMessages } = await import('../server/chatHistory.ts')
 const { logEvent, readRecentLog } = await import('../server/chatLog.ts')
+const { isDryRefusal } = await import('../server/offTopic.ts')
 
 function fakeWs() {
   const events: Json[] = []
@@ -387,6 +388,56 @@ await check('опыт турагента: тема сообщения попад
   const b2 = llmBodies.length
   await handleLlmMessage(fakeWs().ws as never, createSession(), 'привет', deps)
   assert.ok(!/Опыт турагента/.test(String(((llmBodies[b2].messages as Json[])[0]).content)))
+})
+
+await check('посторонняя тема (рецепт борща): модель получает указание на креативный мостик, её мостик уходит клиенту (владелец, 20.10)', async () => {
+  const bridge = 'Свой фирменный рецепт я храню в секрете 😉 А вот где после дня у моря вас накормят так, что захочется добавки, подскажу с радостью. Куда бы махнули?'
+  script = [{ content: bridge }]
+  const before = llmBodies.length
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, createSession(), 'дай рецепт борща', deps)
+  assert.equal(llmBodies.length, before + 1, 'ответ сочиняет модель')
+  const sys = String(((llmBodies[before].messages as Json[])[0]).content)
+  assert.match(sys, /## Это сообщение не про путешествия/)
+  assert.match(sys, /креативный мостик/)
+  assert.ok(!/## Опыт турагента/.test(sys), 'темы базы знаний на этом шаге не нужны')
+  assert.equal(text(a.events), bridge)
+  assert.ok(!a.events.some((e) => e.type === 'error'))
+})
+
+await check('модель написала рецепт или стих — клиенту уходит готовый мостик к поездке', async () => {
+  const cases: Array<[string, string, RegExp]> = [
+    ['дай рецепт борща', 'Борщ просто!\nИнгредиенты: 500 г говядины, 2 свёклы, 300 г капусты, 3 картофелины.\nВарите бульон 1,5 часа.', /говядин|свёкл/],
+    ['напиши стихотворение про кота', 'Пушистый кот на окне\nГреет лапы в тишине\nСмотрит важно на луну\nИ мурлычет про весну', /мурлычет|лапы/],
+    ['а чем борщ отличается от щей?', 'Ингредиенты борща: 500 г говядины, 2 свёклы, 300 г капусты. А в щах свёклы нет.', /говядин|свёкл/],
+  ]
+  for (const [q, answer, leak] of cases) {
+    script = [{ content: answer }]
+    const a = fakeWs()
+    await handleLlmMessage(a.ws as never, createSession(), q, deps)
+    const t = text(a.events)
+    assert.ok(!leak.test(t), t)
+    assert.match(t, /поездк|отдых|тур|отел|море|махн|куда/i, t)
+    assert.ok(!isDryRefusal(t), t)
+  }
+})
+
+await check('модель отказала сухо («это не ко мне») — клиенту уходит креативный мостик', async () => {
+  script = [{ content: 'Это не ко мне — я помогаю только с поездками.' }]
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, createSession(), 'напиши код на python для сортировки списка', deps)
+  const t = text(a.events)
+  assert.ok(!isDryRefusal(t), t)
+  assert.match(t, /\?\s*$/, t)
+})
+
+await check('вопрос про еду в поездке — обычный ответ модели, не отказ', async () => {
+  script = [{ content: 'В Грузии обязательно попробуйте хинкали и хачапури по-аджарски. Планируете поездку — подскажите, из какого города и когда?' }]
+  const before = llmBodies.length
+  const a = fakeWs()
+  await handleLlmMessage(a.ws as never, createSession(), 'что обязательно попробовать из еды в Грузии?', deps)
+  assert.equal(llmBodies.length, before + 1)
+  assert.match(text(a.events), /хинкали/)
 })
 
 console.log(`check-mila-flow: ${passed} passed`)

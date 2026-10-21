@@ -40,8 +40,6 @@ jobs:
       - name: npm run check (поведение Милы, защита данных, тон, тест выкладки)
         run: npm run check
       - name: Типы сервера
-        # Пока предупреждение: в CI типы ещё не проверялись, ошибки разберём отдельным PR.
-        continue-on-error: true
         run: npm run typecheck:server
       - name: Сборка
         run: npm run build

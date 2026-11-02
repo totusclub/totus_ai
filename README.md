@@ -1,4 +1,4 @@
-# Totus AI v2 (Мила)
+# Totus AI v2 (Маша)
 
 AI tour assistant — **frontend + API** in one repo.
 

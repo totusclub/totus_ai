@@ -106,7 +106,7 @@ S1="$(git -C "$W" rev-parse HEAD)"
 run deploy "$S1" || { cat "$T/out"; die "первая выкладка"; }
 [ "$(cur)" = "$S1" ] || die "current → первый коммит"
 [ "$(api_dir)" = "$(readlink -f "$ROOT/current")" ] || die "API запущен из папки релиза"
-grep -q '^totus-ai-web ' "$STATE" || die "сайт Милы тоже запущен"
+grep -q '^totus-ai-web ' "$STATE" || die "сайт Маши тоже запущен"
 [ "$(cat "$ROOT/current/.next/BUILT_FROM")" = "$S1" ] || die "сборка из этого коммита"
 [ -L "$ROOT/current/.env" ] || die ".env — ссылка на shared"
 ok "первая выкладка: релиз собран, PM2 запущен из него, .env общий"
@@ -125,7 +125,7 @@ ok "правка сервера: без сборки, зависимости и�
 S3="$(commit src/page.txt v3)"
 run deploy "$S3" || { cat "$T/out"; die "выкладка правки сайта"; }
 [ "$(cat "$ROOT/current/.next/BUILT_FROM")" = "$S3" ] || die "сборка из нового коммита"
-ok "правка сайта Милы: сборка запускается"
+ok "правка сайта Маши: сборка запускается"
 
 # 4. Новая версия не поднимается — откат на прошлую, выход с ошибкой.
 echo x >"$W/BROKEN"
@@ -138,13 +138,13 @@ grep -q 'вернула' "$T/out" || die "в логе сказано про от
 git -C "$W" rm -q BROKEN && git -C "$W" commit -qm unbreak && git -C "$W" push -q origin main
 ok "API не поднялся — сама вернулась на прошлую версию"
 
-# 4б. API жив, а сайт Милы (ai.totus.club) не отвечает — тоже откат.
+# 4б. API жив, а сайт Маши (ai.totus.club) не отвечает — тоже откат.
 echo x >"$W/BROKEN_WEB"
 S4B="$(commit src/page.txt v4-web-broken)"
 if run deploy "$S4B"; then die "выкладка с неработающим сайтом должна завершиться ошибкой"; fi
 [ "$(cur)" = "$S3" ] || die "после отката сайта current → v3"
 git -C "$W" rm -q BROKEN_WEB && git -C "$W" commit -qm unbreak-web && git -C "$W" push -q origin main
-ok "сайт Милы не поднялся — тоже откат"
+ok "сайт Маши не поднялся — тоже откат"
 
 # 5. Коммит не из main — отказ.
 git -C "$W" checkout -q -b feature && S5="$(echo f >"$W/server/f.txt" && git -C "$W" add -A && git -C "$W" commit -qm f && git -C "$W" rev-parse HEAD)"
@@ -167,7 +167,7 @@ run deploy "$S6" || { cat "$T/out"; die "после добавления пер�
 [ "$(cur)" = "$S6" ] || die "current → коммит с переменной"
 ok "новая переменная: стоп с понятной причиной, после добавления — выкладка"
 
-# 6б. JWT_SECRET не совпадает с totus_API — стоп до переключения, Мила не тронута.
+# 6б. JWT_SECRET не совпадает с totus_API — стоп до переключения, Маша не тронута.
 printf 'JWT_SECRET=api-secret\n' >"$T/api.env"
 printf 'A=1\nNEW_KEY=2\nJWT_SECRET=old-secret\n' >"$ROOT/shared/.env"
 S6B="$(commit server/app.txt v6b)"
@@ -203,11 +203,11 @@ ok "старые релизы чистятся (удачных ≤ 3, неуда
 # 9б. Проверка сервера (deploy/check-server.sh) видит рабочую выкладку.
 PATH="$T/fakebin:$PATH" DEPLOY_LEGACY_DIR="$W" bash "$SRC/deploy/check-server.sh" >"$T/out" 2>&1 || true
 for want in "totus-ai-api работает из текущего релиза" "totus-ai-web работает из текущего релиза" \
-  "/api/health отвечает коммитом текущего релиза" "Мила отвечает: модель, Level.Travel и база подключены" "Ничего не изменено"; do
+  "/api/health отвечает коммитом текущего релиза" "Маша отвечает: модель, Level.Travel и база подключены" "Ничего не изменено"; do
   grep -qF "$want" "$T/out" || { cat "$T/out"; die "check-server: нет «$want»"; }
 done
 grep -q "работает не из текущего релиза" "$T/out" && die "check-server: ложная ошибка про релиз"
-ok "check-server.sh видит, что Мила работает из текущего релиза и отвечает его коммитом"
+ok "check-server.sh видит, что Маша работает из текущего релиза и отвечает его коммитом"
 
 # 10. Первая выкладка, которая не поднялась, — возврат на старую папку.
 ROOT2="$T/srv2"
@@ -218,9 +218,9 @@ SB="$(commit server/app.txt broken-first)"
 rm -f "$W/BROKEN" && git -C "$W" add -A && git -C "$W" commit -qm unbreak2 && git -C "$W" push -q origin main
 echo "legacy" >"$T/legacy/REVISION"
 if DEPLOY_ROOT="$ROOT2" "$D" deploy "$SB" >"$T/out" 2>&1; then die "сломанная первая выкладка должна завершиться ошибкой"; fi
-[ "$(api_dir)" = "$(cd "$T/legacy" && pwd -P)" ] || die "Мила снова из старой папки"
+[ "$(api_dir)" = "$(cd "$T/legacy" && pwd -P)" ] || die "Маша снова из старой папки"
 [ ! -e "$ROOT2/current" ] || die "current убран"
-ok "первая выкладка не поднялась — Мила снова работает из старой папки"
+ok "первая выкладка не поднялась — Маша снова работает из старой папки"
 
 # 11. Ключ из GitHub Actions умеет только deploy <sha>, rollback, status.
 E="$ROOT/bin/deploy-entry.sh"

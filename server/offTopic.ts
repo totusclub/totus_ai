@@ -1,5 +1,5 @@
 /**
- * Mila talks only about travel, tours, hotels and the Totus Club platform —
+ * Masha talks only about travel, tours, hotels and the Totus Club platform —
  * and never with a dry «это не ко мне».
  *
  * Owner, 20.10.2026: «почему ИИ отвечает на вопросы, не связанные с турами???

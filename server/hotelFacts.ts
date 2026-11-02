@@ -1,5 +1,5 @@
 /**
- * Hotel facts cascade — how Mila answers «есть ли там анимация», «какой пляж»,
+ * Hotel facts cascade — how Masha answers «есть ли там анимация», «какой пляж»,
  * «хвалят ли кухню» without ever saying «информации нет»:
  *
  *   1. Level.Travel hotel reference (description + facilities)

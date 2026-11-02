@@ -308,7 +308,7 @@ export async function handleAssistantMessage(
 
       const reason = err instanceof Error ? err.message : String(err)
       logEvent({ session: session.logId ?? 'unknown', kind: 'error', text: reason })
-      // The reason stays in the journal. The customer gets Mila's words, not
+      // The reason stays in the journal. The customer gets Masha's words, not
       // «Не удалось выполнить запрос: 429 …» — clients show `error` as her
       // message, so a technical text looked like a terminal.
       await sendHumanText(ws, fallbackReply('error'))
@@ -319,7 +319,7 @@ export async function handleAssistantMessage(
   await handleRuleBasedMessage(ws, session, userText, deps)
 }
 
-/** A reply from Mila that is not stored in the dialogue (the message was dropped). */
+/** A reply from Masha that is not stored in the dialogue (the message was dropped). */
 export async function sendHumanText(ws: WebSocket, text: string) {
   const messageId = randomUUID()
   for (const chunk of text.match(/.{1,14}/gs) ?? [text]) {

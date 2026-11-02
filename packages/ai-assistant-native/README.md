@@ -1,6 +1,6 @@
 # @tosmedia/ai-assistant-native
 
-React Native чат-виджет «Мила» (Totus AI) — тот же API/WebSocket, что и веб-пакет `@tosmedia/ai-assistant`.
+React Native чат-виджет «Маша» (Totus AI) — тот же API/WebSocket, что и веб-пакет `@tosmedia/ai-assistant`.
 
 Полное описание работы системы (диалог, restore, отели, отличия от веба):  
 **[../../docs/KAK-RABOTAET-AI.md](../../docs/KAK-RABOTAET-AI.md)** (раздел 6 — про этот пакет).

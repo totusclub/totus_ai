@@ -397,7 +397,7 @@ wss.on('connection', (ws, req) => {
         },
       })
     } catch (err) {
-      // Details go to the server log; the customer hears Mila, not an error.
+      // Details go to the server log; the customer hears Masha, not an error.
       console.error('[ws] ошибка ассистента:', err)
       await sendHumanText(ws, fallbackReply('error')).catch(() => undefined)
     }

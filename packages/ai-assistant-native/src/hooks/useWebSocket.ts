@@ -302,7 +302,7 @@ function buildRestorePayload() {
 }
 
 /**
- * JWT в handshake WebSocket: сервер Милы читает `?token=` (SECURITY_JWT_PLAN_RU.md,
+ * JWT в handshake WebSocket: сервер Маши читает `?token=` (SECURITY_JWT_PLAN_RU.md,
  * волна 4). Без токена подключение гостевое — как и раньше.
  */
 function withToken(url: string, token: string | null | undefined): string {

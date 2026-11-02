@@ -1,6 +1,6 @@
 # `@tosmedia/ai-assistant`
 
-Embeddable Totus AI (Мила) React UI.
+Embeddable Totus AI (Маша) React UI.
 
 Как работает система целиком (на русском): **[../../docs/KAK-RABOTAET-AI.md](../../docs/KAK-RABOTAET-AI.md)**
 

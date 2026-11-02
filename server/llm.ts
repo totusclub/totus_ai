@@ -204,7 +204,7 @@ export const TOUR_TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'hotel_rooms_page',
       description:
-        'Любой вопрос про номера: какие номера есть, цена конкретного номера, ванна, балкон, вид, кроватка, кровати, соединительная дверь, этаж, «покажи номера». Номера Мила НЕ подбирает: инструмент показывает клиенту карточку отеля с кнопкой на страницу отеля на totus.club, где все номера с ценами на его даты. Возвращает hotel_page_url и общие сведения о номерах отеля.',
+        'Любой вопрос про номера: какие номера есть, цена конкретного номера, ванна, балкон, вид, кроватка, кровати, соединительная дверь, этаж, «покажи номера». Номера Маша НЕ подбирает: инструмент показывает клиенту карточку отеля с кнопкой на страницу отеля на totus.club, где все номера с ценами на его даты. Возвращает hotel_page_url и общие сведения о номерах отеля.',
       parameters: {
         type: 'object',
         required: ['hotel_id'],
@@ -356,7 +356,7 @@ function getModel() {
 /**
  * The ONLY way to call DeepSeek. Every request passes the personal-data check
  * first: a user message with personal data stops the request (PiiBlockedError),
- * Mila's earlier replies are masked. A new call site cannot forget the check.
+ * Masha's earlier replies are masked. A new call site cannot forget the check.
  */
 async function callDeepSeek(client: OpenAI, body: Record<string, unknown>, hotelNames?: string[]) {
   const safe = assertNoPiiInRequest(body as { messages?: Array<{ role?: string; content?: unknown }> }, guardContext({ hotelNames }))
@@ -1064,7 +1064,7 @@ async function runTool(
 const MAX_TOOL_ROUNDS = 10
 
 
-/** Stream a reply from Mila that did not come from the model (fallbacks). */
+/** Stream a reply from Masha that did not come from the model (fallbacks). */
 export async function streamHumanReply(ws: WebSocket, session: Session, text: string, messageId: string) {
   session.llmMessages?.push({ role: 'assistant', content: text })
   session.history.push({ role: 'assistant', content: text })
@@ -1103,7 +1103,7 @@ export async function handleLlmMessage(
   if (playbooks.length) logEvent({ session: session.logId ?? 'unknown', kind: 'playbook', topics: playbooks.map((p) => p.id) })
   // Owner, 20.10.2026: only travel — and never a dry refusal. A clearly
   // non-travel request (a recipe, a poem, homework, code) is not fulfilled:
-  // Mila picks up the topic and bridges to a trip creatively.
+  // Masha picks up the topic and bridges to a trip creatively.
   const offTopic = offTopicKind(userText)
   if (offTopic) logEvent({ session: session.logId ?? 'unknown', kind: 'off_topic', found: [offTopic], changed: false })
   const withTopics = playbooks.length && !offTopic ? `${basePrompt}\n\n${formatPlaybooks(playbooks)}` : basePrompt

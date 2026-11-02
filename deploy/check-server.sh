@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Проверка настройки автовыкладки Милы на сервере — ТОЛЬКО ЧТЕНИЕ.
+# Проверка настройки автовыкладки Маши на сервере — ТОЛЬКО ЧТЕНИЕ.
 # Ничего не меняет и не перезапускает, значения секретов не печатает.
 # Запуск под root:  bash deploy/check-server.sh 2>&1 | tee /root/totus-ai-check.txt
 # Что делать по каждому ❌ / ⚠️ — в строке «→ …» и в docs/AVTODEPLOY.md.
@@ -18,7 +18,7 @@ bad() { BAD=$((BAD + 1)); echo "  ❌ $1"; [ -n "${2:-}" ] && echo "     → $2"
 h() { printf '\n== %s\n' "$1"; }
 names() { grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$1" 2>/dev/null | cut -d= -f1 | sort -u; }
 
-echo "Проверка автовыкладки Милы · $(date '+%F %T') · $(hostname)"
+echo "Проверка автовыкладки Маши · $(date '+%F %T') · $(hostname)"
 
 h "1. Папки и общий .env"
 for d in "$ROOT" "$ROOT/releases" "$ROOT/shared" "$ROOT/bin"; do
@@ -35,7 +35,7 @@ if [ -f "$ENV" ]; then
   jv() { grep -E "^$1=" "$2" 2>/dev/null | tail -n 1 | cut -d= -f2- | sed -E "s/^[\"']//; s/[\"']$//"; }
   if [ -f "$api_env" ]; then
     if [ -n "$(jv JWT_SECRET "$ENV")" ] && [ "$(jv JWT_SECRET "$ENV")" = "$(jv JWT_SECRET "$api_env")" ]; then
-      ok "JWT_SECRET в shared/.env совпадает с totus_API — Мила узнаёт пользователей"
+      ok "JWT_SECRET в shared/.env совпадает с totus_API — Маша узнаёт пользователей"
     else
       bad "JWT_SECRET в shared/.env НЕ совпадает с $api_env — «Мои чаты» не загружаются и не сохраняются" "перенесите JWT_SECRET из $api_env в $ENV и: pm2 restart totus-ai-api"
     fi
@@ -136,7 +136,7 @@ echo "     totus-ai-web: ${WEB_CWD:-не найден}"
 HEALTH="$(curl -s -m 5 "$HEALTH_URL")"
 H_COMMIT="$(HB="$HEALTH" node -e 'try{const h=JSON.parse(process.env.HB);console.log((h.ok===true&&h.llm?.enabled&&h.levelTravel?.enabled&&h.db?.configured?"ok":"bad")+" "+(h.commit||"-")+" "+(h.build||"-").replace(/ /g,"_"))}catch{console.log("down - -")}')"
 read -r h_state h_commit h_build <<<"$H_COMMIT"
-[ "$h_state" = ok ] && ok "Мила отвечает: модель, Level.Travel и база подключены (build ${h_build//_/ })" || bad "Мила не отвечает как надо: $HEALTH_URL" "pm2 logs totus-ai-api --lines 50"
+[ "$h_state" = ok ] && ok "Маша отвечает: модель, Level.Travel и база подключены (build ${h_build//_/ })" || bad "Маша не отвечает как надо: $HEALTH_URL" "pm2 logs totus-ai-api --lines 50"
 web="$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$WEB_URL")"
 [ "$web" = 200 ] && ok "ai.totus.club (3012) отвечает" || bad "ai.totus.club (3012) отвечает $web"
 if [ -n "$CUR" ]; then
@@ -147,7 +147,7 @@ if [ -n "$CUR" ]; then
   [ "$h_commit" = "$REV" ] && ok "/api/health отвечает коммитом текущего релиза" || bad "/api/health отвечает коммитом «$h_commit», а в релизе ${REV:0:7}"
   [ -n "$GH_MAIN" ] && { [ "$REV" = "$GH_MAIN" ] && ok "на проде последний main" || warn "на проде ${REV:0:7}, а в main ${GH_MAIN:0:7}" "если автовыкладка включена — посмотрите Actions; вручную: /srv/totus/ai/bin/deploy.sh deploy $GH_MAIN"; }
 else
-  warn "первой выкладки ещё не было — Мила работает из $LEGACY" "docs/AVTODEPLOY.md, шаг 3: /srv/totus/ai/bin/deploy.sh deploy ${GH_MAIN:-<коммит main>}"
+  warn "первой выкладки ещё не было — Маша работает из $LEGACY" "docs/AVTODEPLOY.md, шаг 3: /srv/totus/ai/bin/deploy.sh deploy ${GH_MAIN:-<коммит main>}"
 fi
 pm2 jlist 2>/dev/null | grep -q '"pm_cwd"' && { systemctl is-enabled pm2-root >/dev/null 2>&1 && ok "PM2 стартует сам после перезагрузки сервера" || warn "pm2-root не включён в автозапуск" "pm2 startup && pm2 save"; }
 

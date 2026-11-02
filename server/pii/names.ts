@@ -52,8 +52,32 @@ export const AMBIGUOUS_NAMES = new Set(
     .filter(Boolean),
 )
 
-/** Mila herself — «Мила, привет» is not personal data of the customer. */
-export const AGENT_NAMES = new Set(['мила', 'милы', 'миле', 'милу', 'милой', 'милою'])
+/**
+ * The assistant herself — «Маша, привет» is not personal data of the customer.
+ * Маша is the assistant's name since 02.11.2026 (before — Мила; kept so that
+ * «Мила, привет» from returning customers is not flagged either).
+ * «Маша» is also a common customer name, so detect.ts still flags it next to a
+ * surname or a relation word («с дочкой Машей»), and «меня зовут Маша» is caught
+ * by the context rule.
+ */
+export const AGENT_NAMES = new Set([
+  'маша', 'маши', 'маше', 'машу', 'машей', 'машею',
+  'мила', 'милы', 'миле', 'милу', 'милой', 'милою',
+])
+
+/**
+ * Words before «Маша» that make it a person, not the assistant: «я Маша», «это Маша»,
+ * «мы с Машей», «с дочкой Машей», «жена Маша».
+ */
+export const RELATION_WORDS = new Set(
+  `я это с со и для дочь дочери дочерью дочка дочки дочке дочку дочкой жена жены жене жену женой сестра сестры сестре
+   сестру сестрой мама мамы маме маму мамой подруга подруги подруге подругу подругой супруга супруги
+   супруге супругу супругой внучка внучки внучке внучку внучкой племянница племянницы племяннице
+   племянницу племянницей бабушка бабушки бабушке бабушку бабушкой тетя тети тете тетю тетей коллега
+   коллеги коллеге коллегу коллегой`
+    .split(/\s+/)
+    .filter(Boolean),
+)
 
 /** Irregular case forms. */
 const SPECIAL_FORMS: Record<string, string[]> = {

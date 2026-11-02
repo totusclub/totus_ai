@@ -1,7 +1,7 @@
 {
   "name": "@tosmedia/ai-assistant-native",
-  "version": "1.2.3",
-  "description": "Totus AI assistant (Мила) — React Native chat widget",
+  "version": "1.2.4",
+  "description": "Totus AI assistant (Маша) — React Native chat widget",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

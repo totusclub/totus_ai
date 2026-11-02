@@ -1,7 +1,7 @@
 /**
  * «Опыт турагента» — how an experienced travel agent handles a kind of
  * request: what else to ask, what to advise, facts that matter, what our
- * operator confirms with the hotel, and the mistakes Mila made before.
+ * operator confirms with the hotel, and the mistakes Masha made before.
  *
  * Owner, 19.10.2026: «я дал тебе вопросы, чтобы ты сделала поиск по
  * интернету и ещё больше набралась опыта именно как турагент». Built from

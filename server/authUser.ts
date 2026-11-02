@@ -3,7 +3,7 @@ import type { IncomingMessage } from 'http'
 import jwt from 'jsonwebtoken'
 
 /**
- * JWT для сервера Милы (SECURITY_JWT_PLAN_RU.md, волна 4).
+ * JWT для сервера Маши (SECURITY_JWT_PLAN_RU.md, волна 4).
  * Тот же JWT_SECRET, что у totus_API: user-токены (scope 'user', legacy без scope),
  * agent (scope 'agent'), staff (scope 'staff').
  *

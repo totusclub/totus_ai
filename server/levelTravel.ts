@@ -38,7 +38,7 @@ function appendAflt(url: string) {
   }
 }
 
-export const BUILD_TAG = 'v47-advice-button · 2026-10-21'
+export const BUILD_TAG = 'v48-masha · 2026-11-02'
 
 export function isLevelTravelEnabled() {
   const key = process.env.LEVEL_TRAVEL_API_KEY?.trim()
@@ -238,7 +238,7 @@ export class UnsupportedDestinationError extends Error {
 }
 
 const countriesFromApi = new Map<string, { country: string; city?: string; label: string }>()
-/** ISO2 → Russian country name from the reference book (for Mila's prompt). */
+/** ISO2 → Russian country name from the reference book (for Masha's prompt). */
 const countryNamesRu = new Map<string, string>()
 
 export async function loadCountries(): Promise<number> {
@@ -282,7 +282,7 @@ export async function loadCountries(): Promise<number> {
 }
 
 /**
- * Russian names of the countries we sell tours to — Mila must not advise
+ * Russian names of the countries we sell tours to — Masha must not advise
  * a country we do not sell (owner's 500-request run: Париж, Кения, Коста-Рика…).
  * Empty until the reference book has loaded.
  */

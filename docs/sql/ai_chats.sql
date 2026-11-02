@@ -1,4 +1,4 @@
--- AI chat history (Totus Мила) — run once on your MySQL (same DB as kedam is fine).
+-- AI chat history (Totus Маша) — run once on your MySQL (same DB as kedam is fine).
 -- Tables are created automatically on API boot if DB_* env is set; this file is for manual ops.
 
 CREATE TABLE IF NOT EXISTS ai_chats (

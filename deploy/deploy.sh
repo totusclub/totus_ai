@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Выкладка Милы (totus_ai_v2) на сервер — docs/AVTODEPLOY.md.
+# Выкладка Маши (totus_ai_v2) на сервер — docs/AVTODEPLOY.md.
 #
 #   deploy.sh deploy <полный sha>   выложить коммит из main
 #   deploy.sh rollback              вернуть прошлый удачный релиз
@@ -19,11 +19,11 @@ HEALTH_URL="${DEPLOY_HEALTH_URL:-http://127.0.0.1:3011/api/health}"
 WEB_URL="${DEPLOY_WEB_URL:-http://127.0.0.1:3012/}"
 HEALTH_TIMEOUT="${DEPLOY_HEALTH_TIMEOUT:-90}"
 KEEP="${DEPLOY_KEEP:-3}"
-# Папка, из которой Мила работала до автовыкладки: к ней возвращаемся, если
+# Папка, из которой Маша работала до автовыкладки: к ней возвращаемся, если
 # самая первая выкладка не поднялась.
 LEGACY="${DEPLOY_LEGACY_DIR:-/home/totus_ai_v2}"
-# Где выпускаются токены входа (totus_API). JWT_SECRET Милы обязан совпадать с ним,
-# иначе Мила не узнаёт пользователей и «Мои чаты» не сохраняются (так было 21.10).
+# Где выпускаются токены входа (totus_API). JWT_SECRET Маши обязан совпадать с ним,
+# иначе Маша не узнаёт пользователей и «Мои чаты» не сохраняются (так было 21.10).
 JWT_SOURCE="${DEPLOY_JWT_SOURCE:-/home/kedam_API/.env}"
 APPS=(totus-ai-api totus-ai-web)
 
@@ -55,7 +55,7 @@ notify() {
 
 fail() {
   log "ОШИБКА: $*"
-  notify "❌ Мила: выкладка ${SHORT} не удалась — $*"
+  notify "❌ Маша: выкладка ${SHORT} не удалась — $*"
   exit 1
 }
 
@@ -66,7 +66,7 @@ log_tail() {
 }
 
 # Неожиданная ошибка в любой строке — тоже сообщение, а не тишина.
-trap 'log "ОШИБКА: строка $LINENO, команда: $BASH_COMMAND"; notify "❌ Мила: выкладка ${SHORT} прервалась (строка $LINENO)"' ERR
+trap 'log "ОШИБКА: строка $LINENO, команда: $BASH_COMMAND"; notify "❌ Маша: выкладка ${SHORT} прервалась (строка $LINENO)"' ERR
 
 current_release() { [ -L "$CURRENT" ] && readlink -f "$CURRENT" || true; }
 revision_of() { cat "$1/REVISION" 2>/dev/null || true; }
@@ -79,7 +79,7 @@ switch_to() {
 }
 
 # Процессы всегда стартуют из папки релиза (cwd в deploy/ecosystem.config.cjs),
-# поэтому обе части Милы работают из одной версии.
+# поэтому обе части Маши работают из одной версии.
 pm2_start_release() {
   local rel="$1" app
   for app in "${APPS[@]}"; do "$PM2" delete "$app" >/dev/null 2>&1 || true; done
@@ -98,7 +98,7 @@ pm2_start_legacy() {
   "$PM2" save >/dev/null 2>&1 || true
 }
 
-# Мила жива: ok, нужный коммит (если задан), модель, Level.Travel и база подключены.
+# Маша жива: ok, нужный коммит (если задан), модель, Level.Travel и база подключены.
 health_ok() {
   local body
   body="$(curl -s -m 5 "$HEALTH_URL" || true)"
@@ -201,14 +201,14 @@ cmd_deploy() {
   missing="$(comm -23 <(env_names "$rel/.env.example") <(env_names "$SHARED/.env") | tr '\n' ' ')"
   if [ -n "${missing// /}" ]; then
     rm -rf "$rel"
-    fail "в $SHARED/.env нет переменных: ${missing% } — добавьте их и запустите выкладку ещё раз (Мила не тронута)"
+    fail "в $SHARED/.env нет переменных: ${missing% } — добавьте их и запустите выкладку ещё раз (Маша не тронута)"
   fi
 
   # Ключ входа тот же, что у totus_API (значения не печатаются).
   if [ -f "$JWT_SOURCE" ] && [ -n "$(env_value JWT_SECRET "$JWT_SOURCE")" ] \
     && [ "$(env_value JWT_SECRET "$SHARED/.env")" != "$(env_value JWT_SECRET "$JWT_SOURCE")" ]; then
     rm -rf "$rel"
-    fail "JWT_SECRET в $SHARED/.env не совпадает с $JWT_SOURCE — Мила не узнает пользователей и не сохранит их чаты. Перенесите значение из $JWT_SOURCE и запустите выкладку ещё раз (Мила не тронута)"
+    fail "JWT_SECRET в $SHARED/.env не совпадает с $JWT_SOURCE — Маша не узнает пользователей и не сохранит их чаты. Перенесите значение из $JWT_SOURCE и запустите выкладку ещё раз (Маша не тронута)"
   fi
 
   if [ -n "$prev" ] && [ -d "$prev/node_modules" ] && cmp -s "$prev/package-lock.json" "$rel/package-lock.json"; then
@@ -243,30 +243,30 @@ cmd_deploy() {
     prune
     self_update "$rel"
     log "Выкладка $SHORT: готово за $((SECONDS - started)) с"
-    notify "✅ Мила: выложен $SHORT за $((SECONDS - started)) с"
+    notify "✅ Маша: выложен $SHORT за $((SECONDS - started)) с"
     return 0
   fi
 
   # Не поднялась — назад.
-  log "Выкладка $SHORT: Мила не ответила новым коммитом за ${HEALTH_TIMEOUT} с — откат"
+  log "Выкладка $SHORT: Маша не ответила новым коммитом за ${HEALTH_TIMEOUT} с — откат"
   log_tail
   mv "$rel" "$rel.failed"
   if [ -n "$prev" ]; then
     switch_to "$prev"
     pm2_start_release "$prev"
     if wait_health "$prev_sha"; then
-      notify "↩️ Мила: $SHORT не поднялась, вернула ${prev_sha:0:7}. Лог: $LOG"
+      notify "↩️ Маша: $SHORT не поднялась, вернула ${prev_sha:0:7}. Лог: $LOG"
       fail "новая версия не поднялась, вернула ${prev_sha:0:7}"
     fi
   else
     rm -f "$CURRENT"
     pm2_start_legacy
     if wait_health ""; then
-      notify "↩️ Мила: первая выкладка $SHORT не поднялась, вернула работу из $LEGACY. Лог: $LOG"
-      fail "первая выкладка не поднялась, Мила снова работает из $LEGACY"
+      notify "↩️ Маша: первая выкладка $SHORT не поднялась, вернула работу из $LEGACY. Лог: $LOG"
+      fail "первая выкладка не поднялась, Маша снова работает из $LEGACY"
     fi
   fi
-  notify "🔥 Мила: $SHORT не поднялась и откат не помог — нужна ручная помощь. Лог: $LOG"
+  notify "🔥 Маша: $SHORT не поднялась и откат не помог — нужна ручная помощь. Лог: $LOG"
   fail "откат не помог — нужна ручная помощь"
 }
 
@@ -288,7 +288,7 @@ cmd_rollback() {
     mv "$cur" "$cur.failed"
     prune
     log "Откат на $SHORT: готово"
-    notify "↩️ Мила: откат на $SHORT выполнен вручную"
+    notify "↩️ Маша: откат на $SHORT выполнен вручную"
     return 0
   fi
   switch_to "$cur"
@@ -299,7 +299,7 @@ cmd_rollback() {
 cmd_status() {
   local cur rel
   cur="$(current_release)"
-  echo "Сейчас на проде: ${cur:-нет релиза (Мила работает из $LEGACY)}"
+  echo "Сейчас на проде: ${cur:-нет релиза (Маша работает из $LEGACY)}"
   [ -n "$cur" ] && echo "Коммит: $(revision_of "$cur")"
   echo "Релизы:"
   find "$RELEASES" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f\n' 2>/dev/null | sort -rn | cut -d' ' -f2- | sed 's/^/  /'

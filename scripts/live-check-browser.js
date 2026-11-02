@@ -1,13 +1,13 @@
-// Живая проверка Милы на проде — запускается после КАЖДОЙ правки / выкладки
+// Живая проверка Маши на проде — запускается после КАЖДОЙ правки / выкладки
 // (правило владельца 21.10.2026) через Groover: профиль totus-qa (тестовый аккаунт),
 // вкладка https://totus.club, инструмент browse_evaluate с содержимым этого файла.
 // Без реальных личных данных: тестовый чат «QA live check» создаётся и сразу удаляется.
 //
 // Проверяет:
-//   1. /api/health — ok, модель, Level.Travel, база; какой коммит на проде
+//   1. /api/health — ok, модель, Level.Travel, база; какой коммит на проде; имя — Маша
 //   2. вход: токен тестового аккаунта принимается (/api/ai-chats → 200, не 401)
 //   3. «Мои чаты»: тестовый чат сохраняется, виден в списке, удаляется
-//   4. Мила отвечает живым текстом через WebSocket (как виджет), без технической ошибки
+//   4. Маша отвечает живым текстом через WebSocket (как виджет), без технической ошибки
 //   5. старая кнопка «Совет куда ехать» (с «в сентябре») — ответ без сентября
 // Итог: { ok: true|false, checks: [...] } — ok:false = что-то сломано, чинить до всего остального.
 (async () => {
@@ -22,6 +22,7 @@
   try {
     const h = await fetch(API + '/health').then((r) => r.json())
     add('health', h.ok && h.llm?.enabled && h.levelTravel?.enabled && h.db?.configured, { build: h.build, commit: h.commit })
+    add('имя ассистента — Маша', h.llm?.agent === 'Маша', h.llm?.agent)
   } catch (e) {
     add('health', false, String(e))
   }
@@ -45,7 +46,7 @@
     add('тестовый чат удалён', del.ok && !(after2.chats || after2.sessions || []).some((c) => c.id === id), del.status)
   }
 
-  // 4–5. Ответ Милы
+  // 4–5. Ответ Маши
   const ask = (text) =>
     new Promise((resolve) => {
       const ws = new WebSocket(WS + '?token=' + encodeURIComponent(token))
@@ -64,7 +65,7 @@
       }
     })
   const hi = await ask('Привет! Хочу в отпуск, с чего начнём?')
-  add('Мила отвечает', hi.reply.length > 20 && !hi.events.includes('error') && !hi.events.includes('TIMEOUT'), { reply: hi.reply.slice(0, 200), events: hi.events })
+  add('Маша отвечает', !/Мил[аыеуо]/.test(hi.reply) && hi.reply.length > 20 && !hi.events.includes('error') && !hi.events.includes('TIMEOUT'), { reply: hi.reply.slice(0, 200), events: hi.events })
   const sept = await ask('Не знаю куда поехать в сентябре с ребёнком 5 лет — что посоветуете?')
   add('старая кнопка «Совет куда ехать» — без сентября', sept.reply.length > 20 && !/сентябр/i.test(sept.reply), sept.reply.slice(0, 200))
 

@@ -1,6 +1,6 @@
 /**
- * Live run of Mila on a real server: the dialogues from the owner's review
- * on totus.club (18.10.2026) — «Мила должна быть максимально человеком, она
+ * Live run of Masha on a real server: the dialogues from the owner's review
+ * on totus.club (18.10.2026) — «Маша должна быть максимально человеком, она
  * турагент, а не терминал». Not part of `npm run check`: it needs the real
  * DeepSeek and Level.Travel behind the server.
  *
@@ -20,7 +20,7 @@ import { isDryRefusal, looksOffTopicAnswer, offTopicKind } from '../server/offTo
 
 /*
  * Правила владельца — каждый прогон оценивается и по ним, а не только по тону:
- *  1. Мила отвечает только про путешествия, туры, отели и Totus Club; рецепты,
+ *  1. Маша отвечает только про путешествия, туры, отели и Totus Club; рецепты,
  *     стихи, домашку, код не делает — и не отказывает сухо, а креативно
  *     переводит на поездку, как хороший продавец (20.10).
  *  2. Перед подбором уточняет откуда, куда, когда и кто — одним сообщением (19.10).
@@ -194,7 +194,7 @@ if (FILE) {
     .map((x, i) => (typeof x === 'string' ? { n: i + 1, q: x } : { n: x.n ?? i + 1, q: x.q, cat: x.cat }))
     .filter((x) => x.n >= FROM)
     .slice(0, LIMIT || undefined)
-  console.log(`Мила вживую: ${URL}, запросов ${items.length} (параллельно ${PAR})\n`)
+  console.log(`Маша вживую: ${URL}, запросов ${items.length} (параллельно ${PAR})\n`)
   let bad = 0
   const counts = new Map<string, number>()
   await pool(items, PAR, async (it) => {
@@ -215,7 +215,7 @@ if (FILE) {
 let bad = 0
 let total = 0
 const list = SCENARIOS.filter((s) => !only.length || only.some((o) => s.name.includes(o)))
-console.log(`Мила вживую: ${URL}, сценариев ${list.length}\n`)
+console.log(`Маша вживую: ${URL}, сценариев ${list.length}\n`)
 for (const sc of list) {
   const turns = await runDialogue(sc.turns.map(([t]) => t))
   console.log(`— ${sc.name}`)

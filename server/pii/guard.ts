@@ -1,14 +1,14 @@
 /**
- * Personal-data guard for Mila — where the detector is applied.
+ * Personal-data guard for Masha — where the detector is applied.
  *
  *   1. Incoming chat message (WS `chat`): personal data → the message does
- *      not go anywhere, the customer gets a warning in Mila's voice: what not
+ *      not go anywhere, the customer gets a warning in Masha's voice: what not
  *      to write and a request to send the same message again without it.
  *      Checked on the server: a modified client cannot skip it.
  *   2. Restored history (WS `restore`): every message is masked before it
  *      becomes model context.
  *   3. Every request to DeepSeek (`assertNoPiiInRequest`): a user message
- *      with personal data stops the request (fail closed); Mila's own earlier
+ *      with personal data stops the request (fail closed); Masha's own earlier
  *      replies are masked. No code path can send personal data to the model.
  *   4. Storage: chat history (MySQL) and the journal keep only masked text.
  */
@@ -59,7 +59,7 @@ const PAYMENT_TYPES = new Set<PiiType>(['card', 'account', 'secret'])
 const DOCUMENT_TYPES = new Set<PiiType>(['passport', 'inn', 'snils', 'birth_date', 'document'])
 
 /**
- * Mila's warning, in her own voice (owner, 18.10: «она не терминал»): what
+ * Masha's warning, in her own voice (owner, 18.10: «она не терминал»): what
  * not to write, why it is not needed, where a human is, and a request to send
  * the same message again without it. The found value itself is never repeated.
  */
@@ -96,7 +96,7 @@ export function checkUserText(text: string, ctx?: PiiContext): PiiType[] {
 
 /**
  * Tell the customer, in every client version: old clients render `token` /
- * `done` as a normal message from Mila; `pii_blocked` is for new clients
+ * `done` as a normal message from Masha; `pii_blocked` is for new clients
  * (highlight, «Убрать данные и отправить») and is ignored by old ones.
  */
 export async function sendPiiWarning(ws: WebSocket, types: PiiType[], messageId: string) {
@@ -117,7 +117,7 @@ type ChatMessage = { role?: string; content?: unknown }
 
 /**
  * Last line of defence before DeepSeek. Throws PiiBlockedError if a user
- * message still contains personal data; masks it in Mila's own replies.
+ * message still contains personal data; masks it in Masha's own replies.
  * Tool results carry only booking-system data (reviews are masked when read).
  */
 export function assertNoPiiInRequest<T extends { messages?: ChatMessage[] }>(body: T, ctx?: PiiContext): T {

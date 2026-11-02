@@ -1,4 +1,4 @@
-# Проверки на каждый PR и выкладка Милы на сервер после слияния в main.
+# Проверки на каждый PR и выкладка Маши на сервер после слияния в main.
 # Как устроено и как включить — docs/AVTODEPLOY.md.
 # Выкладка включается переменной репозитория DEPLOY_ENABLED=true; пока её нет —
 # только проверки.
@@ -37,7 +37,7 @@ jobs:
           node-version: 20 # как на сервере
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - name: npm run check (поведение Милы, защита данных, тон, тест выкладки)
+      - name: npm run check (поведение Маши, защита данных, тон, тест выкладки)
         run: npm run check
       - name: Типы сервера
         run: npm run typecheck:server

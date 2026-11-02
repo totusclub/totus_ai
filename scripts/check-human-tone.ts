@@ -110,7 +110,7 @@ await check('шаблонное «Отличный выбор!» в начале
   assert.equal(stripTemplateOpener('В ноябре в Египте отличный выбор отелей.'), 'В ноябре в Египте отличный выбор отелей.')
 })
 
-await check('запасные ответы — слова Милы, без «ошибки» и «запроса»', () => {
+await check('запасные ответы — слова Маши, без «ошибки» и «запроса»', () => {
   for (let i = 0; i < 6; i++) {
     for (const kind of ['error', 'stuck'] as const) {
       const t = fallbackReply(kind, i)
@@ -146,7 +146,7 @@ await check('даты в метках шагов — по-человечески
   assert.equal(humanDate('завтра', now), '')
 })
 
-await check('предупреждение о личных данных — голосом Милы, с просьбой отправить ещё раз', () => {
+await check('предупреждение о личных данных — голосом Маши, с просьбой отправить ещё раз', () => {
   for (const types of [['name'], ['phone'], ['passport'], ['order'], ['card'], ['name', 'phone', 'email']] as const) {
     const t = buildPiiWarning([...types])
     assert.deepEqual(findMachineTalk(t), [], t)

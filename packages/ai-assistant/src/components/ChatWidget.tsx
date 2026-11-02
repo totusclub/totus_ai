@@ -84,7 +84,7 @@ export function ChatWidget({ fullscreenOnOpen = false }: ChatWidgetProps) {
           </span>
           <div className="min-w-0">
             <p className="font-[family-name:var(--font-display)] text-[13px] font-semibold tracking-tight text-ink">
-              Мила · Тотус клуб
+              Маша · Тотус клуб
             </p>
             <p className="mt-0.5 flex items-center gap-1.5 text-xs text-subtle">
               {isConnected ? (

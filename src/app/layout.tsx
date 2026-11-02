@@ -3,9 +3,9 @@ import { AppShell } from './AppShell'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Мила — подбор туров · Тотус клуб',
+  title: 'Маша — подбор туров · Тотус клуб',
   description:
-    'Мила — виртуальный турагент Тотус клуба: подбор туров, отелей и номеров в диалоге',
+    'Маша — виртуальный турагент Тотус клуба: подбор туров, отелей и номеров в диалоге',
   icons: {
     icon: '/favicon.svg',
   },

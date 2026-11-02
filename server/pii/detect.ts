@@ -1,5 +1,5 @@
 /**
- * Personal data detector for Mila's chat (owner's rule, 12.10.2026): NO
+ * Personal data detector for Masha's chat (owner's rule, 12.10.2026): NO
  * personal data of any kind may reach DeepSeek or be stored in the open —
  * names, phones, e-mail, home address, passport, cards, ИНН, СНИЛС, date of
  * birth, document / order numbers, profile links, codes and passwords,
@@ -10,7 +10,7 @@
  * The detector fires on VALUES, not on topics: «нужен ли загранпаспорт?»
  * passes, «паспорт 45 12 345678» does not.
  */
-import { AGENT_NAMES, LATIN_NAMES, NAME_FORMS } from './names.js'
+import { AGENT_NAMES, LATIN_NAMES, NAME_FORMS, RELATION_WORDS } from './names.js'
 
 export const PII_RULES_VERSION = 'pii-3 · 2026-10-18'
 
@@ -541,7 +541,14 @@ function detectNames(n: Norm, ctx: PiiContext, out: Array<{ type: PiiType; s: nu
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i]
     if (t.w.length < 2) continue
-    if (AGENT_NAMES.has(t.w)) continue
+    if (AGENT_NAMES.has(t.w)) {
+      // Обращение к ассистенту — не личные данные. Но рядом с фамилией или словом
+      // «дочка / жена / подруга…» это уже человек: проверяем как обычное имя.
+      const person =
+        (toks[i - 1] && RELATION_WORDS.has(toks[i - 1].w)) ||
+        [i - 1, i + 1].some((j) => toks[j] && adjacent(i, j) && isSurnameShape(toks[j]) && toks[j].cap && !AGENT_NAMES.has(toks[j].w))
+      if (!person) continue
+    }
     const entry = NAME_FORMS.get(t.w)
     if (entry) {
       if (nearHotel(i)) continue

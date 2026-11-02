@@ -9,7 +9,7 @@ export function useAssistant() {
   const hydrated = useAssistantStore((s) => s.hydrated)
   const toggleOpen = useAssistantStore((s) => s.toggleOpen)
   const setOpen = useAssistantStore((s) => s.setOpen)
-  // Connect only after storage hydrate — otherwise restore goes empty and Mila loses context.
+  // Connect only after storage hydrate — otherwise restore goes empty and Masha loses context.
   const { send, reset, newChat, openChat } = useWebSocket(hydrated)
 
   return {

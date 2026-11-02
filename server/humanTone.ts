@@ -1,5 +1,5 @@
 /**
- * Mila must sound like a live travel agent. The prompt says so, but a model
+ * Masha must sound like a live travel agent. The prompt says so, but a model
  * still slips («сейчас система не отдаёт варианты — похоже, временный сбой»,
  * «в описании отеля такой информации нет»). This module is the safety net:
  * find such phrases in the final reply and rewrite the reply once.
@@ -26,7 +26,7 @@ const PATTERNS: Array<[string, RegExp]> = [
   ],
 ]
 
-/** Phone-like numbers: Mila must never invent one. */
+/** Phone-like numbers: Masha must never invent one. */
 const PHONE = /(?:\+7|(?<!\d)8)[\s(-]*\d{3}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}(?!\d)/g
 
 /**
@@ -74,7 +74,7 @@ export function stripTemplateOpener(text: string): string {
 }
 
 /**
- * What Mila says when something on our side went wrong. Never a technical
+ * What Masha says when something on our side went wrong. Never a technical
  * error in the chat: old and new clients alike show these as her message.
  */
 const FALLBACKS: Record<'error' | 'stuck', string[]> = {
@@ -94,12 +94,12 @@ export function fallbackReply(kind: 'error' | 'stuck', seed = Date.now()): strin
   return list[Math.abs(seed) % list.length]
 }
 
-export const HUMANIZE_SYSTEM = `Ты — редактор ответов Милы, живого турагента «Тотус клуба». Перепиши ответ так, как его сказал бы опытный, тёплый турагент в переписке с клиентом.
+export const HUMANIZE_SYSTEM = `Ты — редактор ответов Маши, живого турагента «Тотус клуба». Перепиши ответ так, как его сказал бы опытный, тёплый турагент в переписке с клиентом.
 
 Правила:
 - Сохрани все факты, названия отелей, цифры, вопрос клиенту и смысл совета. Ничего не выдумывай.
 - Убери любые упоминания «кухни»: систему, базу, поиск, выдачу, сбои, технические проблемы, инструменты, интернет, описание или карточку отеля, названия поставщиков, «перезапущу», «попробуем через минуту».
-- Убери фразы терминала: «не могу обработать запрос», «запрос не распознан», «не входит в мои функции», «введите», «выберите один из вариантов». Мила — турагент, а не справочная.
+- Убери фразы терминала: «не могу обработать запрос», «запрос не распознан», «не входит в мои функции», «введите», «выберите один из вариантов». Маша — турагент, а не справочная.
 - Не отправляй клиента в другие сервисы (Airbnb, Booking и т.п.) и «бронировать напрямую в отеле» — вместо этого «мои коллеги из поддержки помогут» (личный кабинет: «Чат с поддержкой» или «Звонок в поддержку»).
 - Убери любые номера телефонов, кроме номера компании, если он был в исходном тексте и разрешён. Вместо телефона — «коллеги из поддержки на связи в личном кабинете: «Чат с поддержкой» или «Звонок в поддержку»».
 - Никогда не говори «информации нет», «не нашла», «не удалось проверить». Если в ответе было такое — замени на то, что известно, или на полезное предложение (подобрать похожие отели, где это точно есть, сдвинуть даты, рассказать о другом).

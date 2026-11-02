@@ -99,7 +99,7 @@ export function ChatPanel({
               <Text style={styles.avatarText}>☀️</Text>
             </View>
             <View style={styles.headerText}>
-              <Text style={styles.title}>Мила · Тотус клуб</Text>
+              <Text style={styles.title}>Маша · Тотус клуб</Text>
               <Text style={styles.subtitle}>
                 {isConnected
                   ? llmOn

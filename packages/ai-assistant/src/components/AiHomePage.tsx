@@ -28,10 +28,10 @@ export function AiHomePage({ autoOpenChat = true }: { autoOpenChat?: boolean }) 
             Тотус клуб
           </p>
           <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-            Подбор туров с Милой
+            Подбор туров с Машей
           </h1>
           <p className="mt-2 max-w-xl text-subtle">
-            Опишите отдых в чате — Мила подберёт туры и покажет их здесь со ссылками.
+            Опишите отдых в чате — Маша подберёт туры и покажет их здесь со ссылками.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -50,10 +50,10 @@ export function AiHomePage({ autoOpenChat = true }: { autoOpenChat?: boolean }) 
         <div className="mb-4 flex items-center justify-between gap-3">
           <p className="text-sm text-subtle">
             {isTyping
-              ? 'Мила подбирает туры…'
+              ? 'Маша подбирает туры…'
               : hasTours
-                ? `Мила нашла: ${highlightedTours.length} ${plural(highlightedTours.length)}`
-                : 'Пока пусто — спросите Милу в чате'}
+                ? `Маша нашла: ${highlightedTours.length} ${plural(highlightedTours.length)}`
+                : 'Пока пусто — спросите Машу в чате'}
           </p>
         </div>
 
@@ -84,11 +84,11 @@ function EmptyState({ onOpen }: { onOpen: () => void }) {
         <MessageCircle className="h-10 w-10" />
       </div>
       <h3 className="font-[family-name:var(--font-display)] text-xl font-semibold text-ink">
-        Спросите Милу
+        Спросите Машу
       </h3>
       <p className="mt-2 max-w-md text-sm text-subtle">
         Например: «Турция в конце августа, двое взрослых и ребёнок 5 лет, всё включено, песчаный
-        пляж». Мила найдёт туры и покажет их здесь.
+        пляж». Маша найдёт туры и покажет их здесь.
       </p>
       <Button type="button" className="mt-5" onClick={onOpen}>
         <Sparkles className="h-4 w-4" />

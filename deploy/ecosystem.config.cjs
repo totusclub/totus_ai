@@ -1,4 +1,4 @@
-// PM2: два процесса Милы. Запускаются из папки релиза, где лежит этот файл
+// PM2: два процесса Маши. Запускаются из папки релиза, где лежит этот файл
 // (deploy/deploy.sh: `pm2 start deploy/ecosystem.config.cjs --only <имя>`).
 // Команды те же, что были вручную: `npm run server` и `npm run start:web`.
 const path = require('node:path')

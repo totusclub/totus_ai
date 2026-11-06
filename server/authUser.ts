@@ -46,7 +46,8 @@ export function verifyAccessToken(token: string | null | undefined): AuthPrincip
   const secret = process.env.JWT_SECRET
   if (!secret || !token) return null
   try {
-    const decoded = jwt.verify(token, secret) as Record<string, unknown>
+    // L1 аудита: принимаем только HS256 — алгоритм, которым подписывает totus_API
+    const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] }) as Record<string, unknown>
     if (!decoded || typeof decoded !== 'object') return null
     if (decoded.typ === 'refresh') return null
     const raw = decoded.id
@@ -141,7 +142,12 @@ export function requireRole(allowed: AuthRole[], opts: { strict?: boolean } = {}
   }
 }
 
-export const requireStaff = requireRole(['staff'])
+/**
+ * Диагностика (/api/debug/*, /api/logs*, /api/schema) содержит журналы реальных диалогов —
+ * по умолчанию строгий режим независимо от AUTH_MODE (аудит 2026-11). AI_DEBUG_STRICT=0 — прежнее
+ * поведение (в log-режиме пропуск с записью в лог).
+ */
+export const requireStaff = requireRole(['staff'], { strict: process.env.AI_DEBUG_STRICT !== '0' })
 
 export type WsAuthResult =
   | { status: 'ok'; principal: AuthPrincipal }

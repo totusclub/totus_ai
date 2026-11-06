@@ -41,6 +41,7 @@ import { dbStatus, ensureChatSchema, isDbConfigured } from './db.js'
 import { registerChatHistoryRoutes } from './chatHistory.js'
 import { PII_RULES_VERSION } from './pii/detect.js'
 import type { BookingRequest, SearchFilters, Tour } from './types.js'
+import { createIpLimiter, createWsCounter, wsLimitsFromEnv } from './rateLimit.js'
 
 const PORT = Number(process.env.PORT ?? 3011)
 const CORS_ORIGINS = (process.env.CORS_ORIGINS ??
@@ -58,7 +59,23 @@ const bookings: Array<
   }
 > = []
 
+// Лимиты (аудит 2026-11, H9): HTTP — на IP, AI_RATE_MODE=log|enforce; WS — на соединение (всегда).
+const RATE_LIMIT = Number(process.env.AI_RATE_LIMIT ?? 120)
+const RATE_WINDOW_MS = Number(process.env.AI_RATE_WINDOW_MS ?? 60_000)
+const apiLimiter = createIpLimiter({ name: 'api', limit: Number.isFinite(RATE_LIMIT) ? RATE_LIMIT : 120, windowMs: RATE_WINDOW_MS })
+const bookingLimiter = createIpLimiter({ name: 'bookings', limit: Number(process.env.AI_BOOKINGS_RATE_LIMIT ?? 10), windowMs: 60_000 })
+const BOOKINGS_MAX = Math.max(10, Number(process.env.AI_BOOKINGS_MAX ?? 1000) || 1000)
+const WS_LIMITS = wsLimitsFromEnv()
+
+// Заявки держатся в памяти процесса: не больше AI_BOOKINGS_MAX, старые вытесняются (аудит: рост без границ).
+function rememberBooking(entry: (typeof bookings)[number]) {
+  bookings.push(entry)
+  if (bookings.length > BOOKINGS_MAX) bookings.splice(0, bookings.length - BOOKINGS_MAX)
+}
+
 const app = express()
+// За nginx один хоп: без этого req.ip — адрес прокси и все лимиты на IP считаются общими.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1))
 app.use(
   cors({
     origin(origin, callback) {
@@ -73,6 +90,7 @@ app.use(
   }),
 )
 app.use(express.json({ limit: '2mb' }))
+app.use('/api', apiLimiter.middleware)
 
 registerChatHistoryRoutes(app, requireAuth)
 
@@ -287,8 +305,8 @@ app.get('/api/tours/:id/availability', (req, res) => {
   })
 })
 
-app.post('/api/bookings', (req, res) => {
-  const body = req.body as BookingRequest
+app.post('/api/bookings', bookingLimiter.middleware, (req, res) => {
+  const body = (req.body ?? {}) as BookingRequest
   const tour = findTour(body.tour_id)
   if (!tour) {
     res.status(404).json({ error: 'Tour not found' })
@@ -306,7 +324,7 @@ app.post('/api/bookings', (req, res) => {
     created_at: new Date().toISOString(),
     tour_name: tour.name,
   }
-  bookings.push(booking)
+  rememberBooking(booking)
   res.status(201).json(booking)
 })
 
@@ -315,7 +333,9 @@ app.get('/api/schema', requireStaff, (_req, res) => {
 })
 
 const server = createServer(app)
-const wss = new WebSocketServer({ server, path: '/ws/assistant' })
+// Размер одного кадра WS ограничен (по умолчанию 256 КБ: restore присылает историю чата целиком).
+const WS_MAX_PAYLOAD = Math.max(WS_LIMITS.maxBytes, Number(process.env.AI_WS_MAX_PAYLOAD_BYTES ?? 262_144) || 262_144)
+const wss = new WebSocketServer({ server, path: '/ws/assistant', maxPayload: WS_MAX_PAYLOAD })
 const sessions = new WeakMap<WebSocket, Session>()
 // Кто подключён (по JWT из ?token=). Гости — без записи. В LLM ничего из этого не уходит.
 const wsPrincipals = new WeakMap<WebSocket, AuthPrincipal>()
@@ -328,8 +348,14 @@ wss.on('connection', (ws, req) => {
   }
   if (auth.status === 'ok') wsPrincipals.set(ws, auth.principal)
   sessions.set(ws, createSession())
+  const counter = createWsCounter(WS_LIMITS)
 
   ws.on('message', async (raw) => {
+    // H9 аудита: не больше AI_WS_MAX_MSG_PER_MIN сообщений в минуту с одного соединения.
+    if (!counter.allow()) {
+      ws.send(JSON.stringify({ type: 'error', error: 'too_many_requests' }))
+      return
+    }
     let payload: {
       type?: string
       content?: string
@@ -359,6 +385,11 @@ wss.on('connection', (ws, req) => {
     }
 
     if (payload.type !== 'chat' || !payload.content) return
+    // H9 аудита: текст сообщения не длиннее AI_WS_MAX_MSG_BYTES байт — иначе в LLM не идёт.
+    if (counter.tooLarge(String(payload.content))) {
+      ws.send(JSON.stringify({ type: 'error', error: 'Сообщение слишком длинное' }))
+      return
+    }
 
     const session = sessions.get(ws) ?? createSession()
     sessions.set(ws, session)
@@ -392,7 +423,7 @@ wss.on('connection', (ws, req) => {
             date: body.date,
             guests: body.guests,
           }
-          bookings.push({ ...body, ...booking })
+          rememberBooking({ ...body, ...booking })
           return booking
         },
       })
